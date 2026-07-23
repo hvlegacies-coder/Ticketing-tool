@@ -22,6 +22,7 @@ import {
   AFFECTED_SYSTEMS,
   CONTACT_METHODS,
 } from "@/lib/mondayConfig";
+import { generateClientAccessToken } from "@/lib/utils";
 import { toast } from "sonner";
 
 interface TicketFormProps {
@@ -110,9 +111,19 @@ export function TicketForm({ organizationId, orgSlug, orgName, prefillData, chat
     try {
       const attachmentUrls = await uploadFiles();
 
-      const { data: inserted, error: insertError } = await supabase
+      // Generated client-side (rather than reading back the server-assigned
+      // defaults via `.select()`) because anon has no SELECT policy on
+      // tickets — Postgres enforces the SELECT policy on RETURNING rows too,
+      // so requesting the row back after an anon insert fails RLS entirely,
+      // even though the insert itself is allowed.
+      const ticketId = crypto.randomUUID();
+      const clientAccessToken = generateClientAccessToken();
+
+      const { error: insertError } = await supabase
         .from("tickets")
         .insert({
+          id: ticketId,
+          client_access_token: clientAccessToken,
           organization_id: organizationId,
           client_full_name: form.client_full_name,
           company_name: form.company_name,
@@ -128,13 +139,9 @@ export function TicketForm({ organizationId, orgSlug, orgName, prefillData, chat
           preferred_contact_method: form.preferred_contact_method,
           attachments: attachmentUrls,
           chatbot_transcript: chatTranscript || null,
-        } as never)
-        .select("id, client_access_token")
-        .single();
+        } as never);
 
       if (insertError) throw insertError;
-      const ticketId = inserted.id as string;
-      const clientAccessToken = inserted.client_access_token as string;
 
       // Send confirmation email (non-blocking)
       try {
