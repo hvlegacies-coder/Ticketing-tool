@@ -1,0 +1,28 @@
+project_id = "nflptacvayfbdpalkdbl"
+
+[functions.sync-to-monday]
+verify_jwt = false
+
+[functions.support-chat]
+verify_jwt = false
+
+[functions.process-email-queue]
+verify_jwt = false
+
+[functions.send-ticket-email]
+verify_jwt = false
+
+[functions.send-ticket-resolved-email]
+verify_jwt = false
+
+[functions.send-ticket-processing-email]
+verify_jwt = false
+
+[functions.update-monday-group]
+verify_jwt = false
+
+[functions.monday-webhook]
+verify_jwt = false
+
+[functions.send-invitation-email]
+verify_jwt = false
