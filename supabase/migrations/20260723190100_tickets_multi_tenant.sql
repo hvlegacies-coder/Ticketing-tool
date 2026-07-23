@@ -71,12 +71,27 @@ DROP POLICY IF EXISTS "Anyone can submit tickets" ON public.tickets;
 DROP POLICY IF EXISTS "Authenticated users can view tickets" ON public.tickets;
 DROP POLICY IF EXISTS "Authenticated users can update tickets" ON public.tickets;
 
+-- The organizations table has no anon SELECT policy (by design — see
+-- migration 1), so a plain EXISTS subquery against it here would always be
+-- empty for the anon role and this check would silently reject every public
+-- ticket submission. Route it through a SECURITY DEFINER function instead,
+-- same pattern as is_org_member()/has_org_role().
+CREATE OR REPLACE FUNCTION public.organization_exists(_org_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
+AS $$
+  SELECT EXISTS (SELECT 1 FROM public.organizations WHERE id = _org_id);
+$$;
+
+REVOKE ALL ON FUNCTION public.organization_exists(UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.organization_exists(UUID) TO anon, authenticated;
+
 CREATE POLICY "Anyone can submit tickets to a real organization"
   ON public.tickets FOR INSERT
   TO anon, authenticated
   WITH CHECK (
     organization_id IS NOT NULL
-    AND EXISTS (SELECT 1 FROM public.organizations o WHERE o.id = tickets.organization_id)
+    AND public.organization_exists(organization_id)
   );
 
 CREATE POLICY "Org members can view their organization's tickets"

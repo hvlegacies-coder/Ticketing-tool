@@ -786,6 +786,10 @@ export type Database = {
         Args: { _ticket_id: string; _action: string; _meta?: Json }
         Returns: undefined
       }
+      organization_exists: {
+        Args: { _org_id: string }
+        Returns: boolean
+      }
       move_to_dlq: {
         Args: {
           dlq_name: string
