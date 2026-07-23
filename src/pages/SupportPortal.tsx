@@ -27,15 +27,27 @@ const SupportPortal = () => {
   >();
   const [chatTranscript, setChatTranscript] = useState<Message[] | undefined>();
 
-  const { data: org, isLoading } = useQuery({
+  console.log("[DIAG] SupportPortal render, orgSlug=", orgSlug, "supabase defined?", typeof supabase);
+
+  const { data: org, isLoading, error: queryError } = useQuery({
     queryKey: ["org-public-profile", orgSlug],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc("get_org_public_profile", { _slug: orgSlug! });
-      if (error) throw error;
-      return data?.[0] ?? null;
+      console.log("[DIAG] queryFn starting, orgSlug=", orgSlug);
+      try {
+        const { data, error } = await supabase.rpc("get_org_public_profile", { _slug: orgSlug! });
+        console.log("[DIAG] rpc returned, data=", data, "error=", error);
+        if (error) throw error;
+        return data?.[0] ?? null;
+      } catch (err) {
+        console.log("[DIAG] queryFn caught exception:", err);
+        throw err;
+      }
     },
     enabled: !!orgSlug,
+    retry: false,
   });
+
+  console.log("[DIAG] after useQuery: isLoading=", isLoading, "org=", org, "queryError=", queryError);
 
   const handleTicketDraft = (
     data: {
