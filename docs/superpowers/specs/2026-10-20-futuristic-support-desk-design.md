@@ -173,6 +173,7 @@ suggestion_votes (
 
 ## Build order (one commit per step)
 
+0. Lovable cleanup: replace `@lovable.dev/email-js` in `process-email-queue` with Resend (or delete the function if unused); replace hardcoded `ticket-sync-co.lovable.app` fallbacks with `PUBLIC_APP_URL`; drop `LOVABLE_API_KEY` usage (covered by step 2).
 1. Migrations: `agent_requested_at`, clear-on-first-reply trigger, `ghl_webhook_url`, suggestions tables/RPCs/RLS.
 2. `support-chat` Claude rewrite.
 3. Widget rebuild with live mode + handoff; `NotificationBell` in shell.
