@@ -10,6 +10,7 @@ import {
   buildTranscript,
   clearLiveSession,
   createHandoffTicket,
+  fitDimensions,
   loadLiveSession,
   saveLiveSession,
   sendAiMessage,
@@ -112,5 +113,43 @@ describe("createHandoffTicket", () => {
     await expect(
       createHandoffTicket({ organizationId: "o", name: "N", email: "e@x.com", turns: [] }),
     ).rejects.toThrow("rls");
+  });
+});
+
+describe("photos", () => {
+  const img = { media_type: "image/jpeg" as const, data: "QUJD", previewUrl: "blob:x" };
+
+  it("never sends the preview URL to the server", async () => {
+    invoke.mockResolvedValue({ data: { reply: "ok", handoff: false }, error: null });
+    await sendAiMessage("org", [{ role: "user", content: "see", image: img }]);
+    expect(invoke.mock.calls[0][1].body.messages[0].image).toEqual({ media_type: "image/jpeg", data: "QUJD" });
+  });
+
+  it("marks photos in the transcript without image data", () => {
+    expect(buildTranscript([{ role: "user", content: "my W2", image: img }])).toBe("Customer: [photo] my W2");
+  });
+
+  it("does not store photos on the handoff ticket", async () => {
+    insert.mockResolvedValue({ error: null });
+    await createHandoffTicket({
+      organizationId: "o",
+      name: "N",
+      email: "e@x.com",
+      turns: [{ role: "user", content: "my W2", image: img }],
+    });
+    const row = insert.mock.calls[0][0];
+    expect(JSON.stringify(row)).not.toContain("QUJD");
+    expect(row.chatbot_transcript).toEqual([{ role: "user", content: "[photo] my W2" }]);
+  });
+});
+
+describe("fitDimensions", () => {
+  it("scales the long edge down to 1568px", () => {
+    expect(fitDimensions(4032, 3024)).toEqual({ width: 1568, height: 1176 });
+    expect(fitDimensions(3024, 4032)).toEqual({ width: 1176, height: 1568 });
+  });
+
+  it("leaves small images alone", () => {
+    expect(fitDimensions(800, 600)).toEqual({ width: 800, height: 600 });
   });
 });

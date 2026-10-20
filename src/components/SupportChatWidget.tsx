@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { FileText, MessageCircle, Send, UserRound, X } from "lucide-react";
+import { Camera, FileText, MessageCircle, Send, UserRound, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { AiOrb } from "@/components/chat/AiOrb";
 import { HandoffForm } from "@/components/chat/HandoffForm";
 import { ThinkingWave } from "@/components/chat/ThinkingWave";
 import {
+  type ChatImage,
   type ChatTurn,
   type LiveSession,
   clearLiveSession,
@@ -17,13 +18,14 @@ import {
   loadLiveSession,
   saveLiveSession,
   sendAiMessage,
+  shrinkImage,
 } from "@/lib/supportChat";
 
 const GREETING: ChatTurn = {
   role: "assistant",
   content: "Hi! Describe your issue and I'll help — or connect you to a person.",
 };
-const QUICK_ACTIONS = ["Track refund", "Upload docs"];
+const QUICK_ACTIONS = ["Track refund"];
 
 interface SupportChatWidgetProps {
   organizationId: string;
@@ -50,6 +52,9 @@ export function SupportChatWidget({ organizationId, onTicketDraft }: SupportChat
   const [agentName, setAgentName] = useState<string | null>(null);
   const submittingRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [pendingPhoto, setPendingPhoto] = useState<ChatImage | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
   const reduceMotion = useReducedMotion();
 
   useEffect(() => {
@@ -63,12 +68,30 @@ export function SupportChatWidget({ organizationId, onTicketDraft }: SupportChat
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
+  const handlePhoto = async (file: File | undefined) => {
+    if (!file) return;
+    setPhotoError(null);
+    try {
+      setPendingPhoto(await shrinkImage(file));
+    } catch (err) {
+      setPhotoError(
+        err instanceof Error && err.message === "too_large"
+          ? "That photo is too large (max 10 MB)."
+          : "Couldn't read that photo — try a JPG or PNG.",
+      );
+    } finally {
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
   const send = async (text: string) => {
     const content = text.trim();
-    if (!content || isLoading) return;
-    const next = [...messages, { role: "user" as const, content }];
+    if ((!content && !pendingPhoto) || isLoading) return;
+    const turn: ChatTurn = pendingPhoto ? { role: "user", content, image: pendingPhoto } : { role: "user", content };
+    const next = [...messages, turn];
     setMessages(next);
     setInput("");
+    setPendingPhoto(null);
     setIsLoading(true);
     const { reply, handoff } = await sendAiMessage(organizationId, next);
     setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
@@ -196,6 +219,13 @@ export function SupportChatWidget({ organizationId, onTicketDraft }: SupportChat
                             : "rounded-2xl rounded-bl-sm border border-cyan/30 bg-cyan/[0.08]"
                         }`}
                       >
+                        {m.image?.previewUrl && (
+                          <img
+                            src={m.image.previewUrl}
+                            alt="Your photo"
+                            className="mb-1.5 max-h-40 w-full rounded-lg object-cover ring-1 ring-black/20"
+                          />
+                        )}
                         {m.role === "assistant" ? (
                           <div className="prose prose-sm prose-invert max-w-none [&>p]:m-0">
                             <ReactMarkdown>{m.content}</ReactMarkdown>
@@ -221,6 +251,12 @@ export function SupportChatWidget({ organizationId, onTicketDraft }: SupportChat
                   >
                     <UserRound className="h-3 w-3" /> Talk to an agent
                   </button>
+                  <button
+                    onClick={() => fileRef.current?.click()}
+                    className="inline-flex items-center gap-1 rounded-full border border-cyan/40 px-2.5 py-1 text-[11px] text-cyan hover:bg-cyan/10"
+                  >
+                    <Camera className="h-3 w-3" /> Send a photo
+                  </button>
                   {QUICK_ACTIONS.map((label) => (
                     <button
                       key={label}
@@ -240,6 +276,33 @@ export function SupportChatWidget({ organizationId, onTicketDraft }: SupportChat
                   )}
                 </div>
 
+                {(pendingPhoto || photoError) && (
+                  <div className="flex items-center gap-2 border-t border-cyan/20 px-3 pt-2">
+                    {pendingPhoto?.previewUrl && (
+                      <div className="relative">
+                        <img src={pendingPhoto.previewUrl} alt="Photo to send" className="h-14 w-14 rounded-lg object-cover ring-1 ring-cyan/40" />
+                        <button
+                          onClick={() => setPendingPhoto(null)}
+                          aria-label="Remove photo"
+                          className="absolute -right-1.5 -top-1.5 rounded-full bg-navy p-0.5 ring-1 ring-cyan/40"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    )}
+                    {photoError && <p role="alert" className="text-xs text-destructive">{photoError}</p>}
+                    {pendingPhoto && <p className="text-[11px] text-muted-foreground">Add a note or just send.</p>}
+                  </div>
+                )}
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  aria-label="Photo file"
+                  className="sr-only"
+                  tabIndex={-1}
+                  onChange={(e) => handlePhoto(e.target.files?.[0])}
+                />
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
@@ -247,6 +310,16 @@ export function SupportChatWidget({ organizationId, onTicketDraft }: SupportChat
                   }}
                   className="flex gap-2 border-t border-cyan/20 p-3"
                 >
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => fileRef.current?.click()}
+                    aria-label="Attach a photo"
+                    className="h-9 w-9 shrink-0 text-cyan"
+                  >
+                    <Camera className="h-4 w-4" />
+                  </Button>
                   <Input
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
@@ -257,7 +330,7 @@ export function SupportChatWidget({ organizationId, onTicketDraft }: SupportChat
                   <Button
                     type="submit"
                     size="icon"
-                    disabled={isLoading || !input.trim()}
+                    disabled={isLoading || (!input.trim() && !pendingPhoto)}
                     aria-label="Send message"
                     className="h-9 w-9 shrink-0 bg-gradient-gold text-primary-foreground"
                   >

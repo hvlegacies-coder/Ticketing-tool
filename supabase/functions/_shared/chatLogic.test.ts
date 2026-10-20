@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseChatResult, rateLimitKey, toApiMessages, validateChatRequest } from "./chatLogic";
+import { MAX_IMAGE_BASE64, parseChatResult, rateLimitKey, toApiMessages, validateChatRequest } from "./chatLogic";
 
 describe("validateChatRequest", () => {
   it("rejects more than 30 messages", () => {
@@ -109,5 +109,57 @@ describe("rateLimitKey", () => {
 
   it("falls back to a shared bucket when no address is present", () => {
     expect(rateLimitKey(new Headers())).toBe("ip:unknown");
+  });
+});
+
+describe("images", () => {
+  const img = { media_type: "image/jpeg", data: "QUJD" };
+
+  it("accepts a user turn with an image and an empty caption", () => {
+    const r = validateChatRequest({ organizationId: "o", messages: [{ role: "user", content: "", image: img }] });
+    expect(r.ok).toBe(true);
+  });
+
+  it("rejects an image on an assistant turn", () => {
+    expect(
+      validateChatRequest({ organizationId: "o", messages: [{ role: "user", content: "hi" }, { role: "assistant", content: "x", image: img }] }),
+    ).toEqual({ ok: false, error: "invalid_body" });
+  });
+
+  it("rejects unsupported image types", () => {
+    expect(
+      validateChatRequest({ organizationId: "o", messages: [{ role: "user", content: "", image: { media_type: "image/tiff", data: "QUJD" } }] }),
+    ).toEqual({ ok: false, error: "invalid_image" });
+  });
+
+  it("rejects images over the size limit", () => {
+    const big = { media_type: "image/jpeg", data: "A".repeat(MAX_IMAGE_BASE64 + 1) };
+    expect(validateChatRequest({ organizationId: "o", messages: [{ role: "user", content: "", image: big }] })).toEqual({
+      ok: false,
+      error: "image_too_large",
+    });
+  });
+
+  it("rejects a text-only turn with empty content", () => {
+    expect(validateChatRequest({ organizationId: "o", messages: [{ role: "user", content: "" }] })).toEqual({
+      ok: false,
+      error: "invalid_body",
+    });
+  });
+
+  it("sends only the latest photo and replaces older ones with a placeholder", () => {
+    const out = toApiMessages([
+      { role: "user", content: "first", image: img },
+      { role: "assistant", content: "ok" },
+      { role: "user", content: "", image: { media_type: "image/png", data: "WFla" } },
+    ]);
+    expect(out[0]).toEqual({ role: "user", content: "first\n[customer shared a photo]" });
+    expect(out[2]).toEqual({
+      role: "user",
+      content: [
+        { type: "image", source: { type: "base64", media_type: "image/png", data: "WFla" } },
+        { type: "text", text: "Please look at this photo." },
+      ],
+    });
   });
 });

@@ -145,7 +145,13 @@ Keep responses short (2-4 sentences). Never ask multiple questions at once. Be w
 
 const HANDOFF_INSTRUCTION = `
 
-If the customer asks for a human, an agent, or a real person, or you cannot resolve their issue, call ${HANDOFF_TOOL_NAME}. Keep replies under 120 words.`;
+If the customer asks for a human, an agent, or a real person, or you cannot resolve their issue, call ${HANDOFF_TOOL_NAME}. Keep replies under 120 words.
+
+Customers may send photos (screenshots, error messages, tax forms like W-2s or 1099s, IDs). When they do:
+- Briefly say what you see (document type, error text, which fields look blank or unreadable) and help with their issue.
+- Never repeat Social Security numbers, full account or routing numbers, ID numbers, or dates of birth. Refer to them generically ("the SSN in Box a").
+- If the photo is blurry or cropped, ask for a clearer one.
+- Your description becomes the record for our team if the customer later asks for an agent, so make it specific but free of sensitive numbers.`;
 
 const requestHumanAgentTool = {
   name: HANDOFF_TOOL_NAME,

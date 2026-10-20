@@ -1,7 +1,21 @@
 import { supabase } from "@/integrations/supabase/client";
 import { generateClientAccessToken } from "@/lib/utils";
 
-export type ChatTurn = { role: "user" | "assistant"; content: string };
+export type ChatImage = { media_type: "image/jpeg" | "image/png" | "image/webp" | "image/gif"; data: string; previewUrl?: string };
+export type ChatTurn = { role: "user" | "assistant"; content: string; image?: ChatImage };
+
+/** Text-only view of a turn: photos become a "[photo]" marker (option A: photos are never stored). */
+const textOnly = (m: ChatTurn) => (m.image ? `[photo]${m.content ? " " + m.content : ""}` : m.content);
+
+// Only the latest photo goes over the wire; previewUrl is browser-only.
+function toWire(messages: ChatTurn[]) {
+  const last = messages.map((m) => !!m.image).lastIndexOf(true);
+  return messages.map((m, i) => {
+    if (!m.image) return { role: m.role, content: m.content };
+    if (i !== last) return { role: m.role, content: textOnly(m) };
+    return { role: m.role, content: m.content, image: { media_type: m.image.media_type, data: m.image.data } };
+  });
+}
 
 export type LiveSession = { ticketId: string; token: string; name: string; email: string };
 
@@ -19,7 +33,7 @@ export async function sendAiMessage(
 ): Promise<{ reply: string; handoff: boolean }> {
   try {
     const { data, error } = await supabase.functions.invoke("support-chat", {
-      body: { organizationId, messages: messages.slice(-MAX_SENT_TURNS) },
+      body: { organizationId, messages: toWire(messages.slice(-MAX_SENT_TURNS)) },
     });
     if (error || typeof data?.reply !== "string") return { reply: AI_FALLBACK_TEXT, handoff: false };
     return { reply: data.reply, handoff: data.handoff === true };
@@ -30,7 +44,7 @@ export async function sendAiMessage(
 
 export function buildTranscript(messages: ChatTurn[]): string {
   return messages
-    .map((m) => `${m.role === "user" ? "Customer" : "AI"}: ${m.content}`)
+    .map((m) => `${m.role === "user" ? "Customer" : "AI"}: ${textOnly(m)}`)
     .join("\n")
     .slice(0, TRANSCRIPT_MAX_CHARS);
 }
@@ -57,7 +71,7 @@ export async function createHandoffTicket(input: {
     issue_category: "Live Chat",
     priority: "Medium",
     issue_description: buildTranscript(input.turns) || "Customer requested a live agent.",
-    chatbot_transcript: input.turns,
+    chatbot_transcript: input.turns.map((m) => ({ role: m.role, content: textOnly(m) })),
     agent_requested_at: new Date().toISOString(),
   } as never);
   if (error) throw error;
@@ -90,4 +104,27 @@ export function clearLiveSession(orgId: string): void {
   } catch {
     // ignore
   }
+}
+
+const MAX_EDGE = 1568;
+export const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
+
+/** Fit within a 1568px long edge (Claude's sweet spot), never upscaling. */
+export function fitDimensions(width: number, height: number): { width: number; height: number } {
+  const scale = Math.min(1, MAX_EDGE / Math.max(width, height));
+  return { width: Math.round(width * scale), height: Math.round(height * scale) };
+}
+
+/** Downscale and re-encode a photo as JPEG in the browser. Throws if it can't be decoded. */
+export async function shrinkImage(file: File): Promise<ChatImage> {
+  if (file.size > MAX_PHOTO_BYTES) throw new Error("too_large");
+  const bitmap = await createImageBitmap(file);
+  const { width, height } = fitDimensions(bitmap.width, bitmap.height);
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  canvas.getContext("2d")!.drawImage(bitmap, 0, 0, width, height);
+  bitmap.close();
+  const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+  return { media_type: "image/jpeg", data: dataUrl.split(",")[1], previewUrl: dataUrl };
 }

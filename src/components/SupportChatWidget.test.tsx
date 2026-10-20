@@ -7,6 +7,7 @@ const chat = vi.hoisted(() => ({
   saveLiveSession: vi.fn(),
   loadLiveSession: vi.fn(),
   clearLiveSession: vi.fn(),
+  shrinkImage: vi.fn(),
 }));
 vi.mock("@/lib/supportChat", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/supportChat")>()),
@@ -109,5 +110,36 @@ describe("SupportChatWidget", () => {
     act(() => live.props!.onSupportJoined!("Maria"));
     await waitFor(() => expect(screen.getAllByText("⚡ Maria joined the chat")).toHaveLength(1));
     expect(screen.queryByText("Waiting for an agent…")).not.toBeInTheDocument();
+  });
+
+  it("sends a photo with its caption to the AI", async () => {
+    chat.shrinkImage.mockResolvedValue({ media_type: "image/jpeg", data: "QUJD", previewUrl: "data:image/jpeg;base64,QUJD" });
+    chat.sendAiMessage.mockResolvedValue({ reply: "I see a W-2 with Box 1 blank.", handoff: false });
+    render(<SupportChatWidget organizationId="org-1" />);
+    openWidget();
+    const file = new File(["x"], "w2.jpg", { type: "image/jpeg" });
+    fireEvent.change(screen.getByLabelText("Photo file"), { target: { files: [file] } });
+    expect(await screen.findByAltText("Photo to send")).toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText("Type a message…"), { target: { value: "is this right?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    expect(await screen.findByText("I see a W-2 with Box 1 blank.")).toBeInTheDocument();
+    const sent = chat.sendAiMessage.mock.calls[0][1];
+    expect(sent[sent.length - 1]).toMatchObject({ role: "user", content: "is this right?", image: { data: "QUJD" } });
+    expect(screen.getByAltText("Your photo")).toBeInTheDocument();
+  });
+
+  it("explains when a photo can't be used", async () => {
+    chat.shrinkImage.mockRejectedValue(new Error("too_large"));
+    render(<SupportChatWidget organizationId="org-1" />);
+    openWidget();
+    fireEvent.change(screen.getByLabelText("Photo file"), { target: { files: [new File(["x"], "big.jpg", { type: "image/jpeg" })] } });
+    expect(await screen.findByRole("alert")).toHaveTextContent("That photo is too large (max 10 MB).");
+  });
+
+  it("offers a Send a photo quick action instead of Upload docs", () => {
+    render(<SupportChatWidget organizationId="org-1" />);
+    openWidget();
+    expect(screen.getByRole("button", { name: /Send a photo/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Upload docs" })).not.toBeInTheDocument();
   });
 });
