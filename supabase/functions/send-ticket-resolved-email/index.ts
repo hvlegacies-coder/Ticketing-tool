@@ -1,3 +1,4 @@
+import { appUrl } from "../_shared/appUrl.ts";
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
@@ -27,7 +28,7 @@ Deno.serve(async (req) => {
       )
     }
 
-    const chatLink = providedChatLink || `https://ticket-sync-co.lovable.app/ticket/${ticketId}/chat`
+    const chatLink = providedChatLink || appUrl("/", Deno.env.get("PUBLIC_APP_URL") ?? "")
     const brandName = orgName || 'HigherView Taxes LLC'
     const shortId = ticketId.slice(0, 8).toUpperCase()
 

@@ -1,3 +1,4 @@
+import { appUrl } from "../_shared/appUrl.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -162,7 +163,7 @@ serve(async (req) => {
             priority: ticket.priority,
             issueCategory: ticket.issue_category,
             department: ticket.department,
-            chatLink: `${Deno.env.get("PUBLIC_APP_URL") || "https://ticket-sync-co.lovable.app"}/t/${ticket.client_access_token}`,
+            chatLink: appUrl(`/t/${ticket.client_access_token}`, Deno.env.get("PUBLIC_APP_URL") ?? ""),
           }),
         });
         console.log("Processing email sent, status:", emailRes.status);
@@ -186,7 +187,7 @@ serve(async (req) => {
             issueCategory: ticket.issue_category,
             department: ticket.department,
             resolvedBy: "Monday.com",
-            chatLink: `${Deno.env.get("PUBLIC_APP_URL") || "https://ticket-sync-co.lovable.app"}/t/${ticket.client_access_token}`,
+            chatLink: appUrl(`/t/${ticket.client_access_token}`, Deno.env.get("PUBLIC_APP_URL") ?? ""),
           }),
         });
         console.log("Resolved email sent, status:", emailRes.status);
