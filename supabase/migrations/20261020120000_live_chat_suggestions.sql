@@ -143,7 +143,9 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.call_notify_webhook(TEXT, UUID, UUID) FROM PUBLIC;
+-- Supabase default privileges grant EXECUTE on new public functions to anon and
+-- authenticated explicitly, so FROM PUBLIC alone would leave this RPC-callable.
+REVOKE ALL ON FUNCTION public.call_notify_webhook(TEXT, UUID, UUID) FROM PUBLIC, anon, authenticated;
 
 CREATE OR REPLACE FUNCTION public.notify_ghl_agent_requested()
 RETURNS TRIGGER
@@ -340,8 +342,41 @@ REVOKE ALL ON FUNCTION public.create_suggestion(TEXT, TEXT, TEXT, TEXT, TEXT, TE
 GRANT EXECUTE ON FUNCTION public.create_suggestion(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT) TO anon, authenticated;
 REVOKE ALL ON FUNCTION public.vote_suggestion(UUID, TEXT) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.vote_suggestion(UUID, TEXT) TO anon, authenticated;
-REVOKE ALL ON FUNCTION public.suggestion_vote_count() FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.suggestion_rate_limit() FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.clear_agent_requested_on_support_reply() FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.notify_ghl_agent_requested() FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.notify_ghl_client_message() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.suggestion_vote_count() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.suggestion_rate_limit() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.clear_agent_requested_on_support_reply() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.notify_ghl_agent_requested() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.notify_ghl_client_message() FROM PUBLIC, anon, authenticated;
+
+-- ============================================================================
+-- AI chat rate limit (service role only; called by the support-chat function)
+-- ============================================================================
+
+CREATE TABLE public.ai_chat_rate_limits (
+  key TEXT PRIMARY KEY,
+  window_start TIMESTAMPTZ NOT NULL DEFAULT now(),
+  count INTEGER NOT NULL DEFAULT 0
+);
+ALTER TABLE public.ai_chat_rate_limits ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.ai_chat_rate_limits FROM anon, authenticated;
+
+-- Counts one request for _key; returns false once _limit is exceeded in the window.
+CREATE OR REPLACE FUNCTION public.bump_ai_chat_rate(_key TEXT, _limit INTEGER, _window INTERVAL)
+RETURNS BOOLEAN
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+AS $$
+DECLARE
+  _count INTEGER;
+BEGIN
+  INSERT INTO public.ai_chat_rate_limits AS r (key, window_start, count)
+  VALUES (_key, now(), 1)
+  ON CONFLICT (key) DO UPDATE SET
+    window_start = CASE WHEN r.window_start < now() - _window THEN now() ELSE r.window_start END,
+    count = CASE WHEN r.window_start < now() - _window THEN 1 ELSE r.count + 1 END
+  RETURNING count INTO _count;
+  RETURN _count <= _limit;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.bump_ai_chat_rate(TEXT, INTEGER, INTERVAL) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.bump_ai_chat_rate(TEXT, INTEGER, INTERVAL) TO service_role;

@@ -9,6 +9,8 @@ export const AI_FALLBACK_TEXT =
   'I\'m having trouble connecting right now. You can submit a ticket with the form, or tap "Talk to an agent".';
 
 const TRANSCRIPT_MAX_CHARS = 10_000;
+// Matches MAX_MESSAGES in supabase/functions/_shared/chatLogic.ts; older turns are dropped.
+const MAX_SENT_TURNS = 30;
 const sessionKey = (orgId: string) => `hv-live-chat:${orgId}`;
 
 export async function sendAiMessage(
@@ -17,7 +19,7 @@ export async function sendAiMessage(
 ): Promise<{ reply: string; handoff: boolean }> {
   try {
     const { data, error } = await supabase.functions.invoke("support-chat", {
-      body: { organizationId, messages },
+      body: { organizationId, messages: messages.slice(-MAX_SENT_TURNS) },
     });
     if (error || typeof data?.reply !== "string") return { reply: AI_FALLBACK_TEXT, handoff: false };
     return { reply: data.reply, handoff: data.handoff === true };

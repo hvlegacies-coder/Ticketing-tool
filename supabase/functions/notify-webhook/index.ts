@@ -43,6 +43,7 @@ serve(async (req) => {
         .from("chat_messages")
         .select("message, created_at")
         .eq("id", message_id)
+        .eq("ticket_id", ticket_id)
         .maybeSingle();
       if (msg) {
         message = msg.message;

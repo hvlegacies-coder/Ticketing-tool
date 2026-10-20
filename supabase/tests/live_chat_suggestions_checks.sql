@@ -105,5 +105,24 @@ BEGIN
 END $$;
 RESET ROLE;
 
-\echo 'live_chat_suggestions_checks: all assertions passed'
+\-- 7. Webhook and rate-limit functions are not callable by anon/authenticated.
+DO $
+BEGIN
+  ASSERT NOT has_function_privilege('anon', 'public.call_notify_webhook(text,uuid,uuid)', 'EXECUTE'),
+    'anon can execute call_notify_webhook';
+  ASSERT NOT has_function_privilege('authenticated', 'public.call_notify_webhook(text,uuid,uuid)', 'EXECUTE'),
+    'authenticated can execute call_notify_webhook';
+  ASSERT NOT has_function_privilege('anon', 'public.bump_ai_chat_rate(text,integer,interval)', 'EXECUTE'),
+    'anon can execute bump_ai_chat_rate';
+END $;
+
+-- 8. Rate limit allows _limit requests per window, then refuses.
+DO $
+BEGIN
+  ASSERT public.bump_ai_chat_rate('check:ip', 2, interval '1 hour'), '1st request refused';
+  ASSERT public.bump_ai_chat_rate('check:ip', 2, interval '1 hour'), '2nd request refused';
+  ASSERT NOT public.bump_ai_chat_rate('check:ip', 2, interval '1 hour'), '3rd request allowed';
+END $;
+
+echo 'live_chat_suggestions_checks: all assertions passed'
 ROLLBACK;

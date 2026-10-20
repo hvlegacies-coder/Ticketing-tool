@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Anthropic from "npm:@anthropic-ai/sdk";
-import { HANDOFF_TOOL_NAME, parseChatResult, toApiMessages, validateChatRequest } from "../_shared/chatLogic.ts";
+import { HANDOFF_TOOL_NAME, parseChatResult, rateLimitKey, toApiMessages, validateChatRequest } from "../_shared/chatLogic.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -166,6 +166,10 @@ const json = (body: unknown, status = 200) =>
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
+// Per-client cap so the public endpoint can't run up the Anthropic bill.
+const RATE_LIMIT = 60;
+const RATE_WINDOW = "1 hour";
+
 const anthropic = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY") });
 
 serve(async (req) => {
@@ -182,27 +186,41 @@ serve(async (req) => {
   const parsed = validateChatRequest(body);
   if (!parsed.ok) return json({ error: parsed.error }, 400);
 
-  let systemPrompt = DEFAULT_SYSTEM_PROMPT;
-  if (parsed.organizationId) {
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
-    const { data: integration } = await supabaseAdmin
-      .from("organization_integrations")
-      .select("ai_chat_enabled, ai_system_prompt_override")
-      .eq("organization_id", parsed.organizationId)
-      .maybeSingle();
+  const supabaseAdmin = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  );
 
-    if (integration?.ai_chat_enabled === false) {
-      return json({
-        reply: "Our AI assistant is currently unavailable — please use the ticket form above to reach our team.",
-        handoff: false,
-      });
-    }
-    if (integration?.ai_system_prompt_override) {
-      systemPrompt = integration.ai_system_prompt_override;
-    }
+  const { data: org } = await supabaseAdmin
+    .from("organizations")
+    .select("id")
+    .eq("id", parsed.organizationId)
+    .maybeSingle();
+  if (!org) return json({ error: "unknown_organization" }, 400);
+
+  const { data: allowed, error: rateError } = await supabaseAdmin.rpc("bump_ai_chat_rate", {
+    _key: rateLimitKey(req.headers),
+    _limit: RATE_LIMIT,
+    _window: RATE_WINDOW,
+  });
+  if (rateError) console.error("support-chat rate limit error:", rateError.message);
+  if (allowed === false) return json({ error: "rate_limited" }, 429);
+
+  let systemPrompt = DEFAULT_SYSTEM_PROMPT;
+  const { data: integration } = await supabaseAdmin
+    .from("organization_integrations")
+    .select("ai_chat_enabled, ai_system_prompt_override")
+    .eq("organization_id", parsed.organizationId)
+    .maybeSingle();
+
+  if (integration?.ai_chat_enabled === false) {
+    return json({
+      reply: "Our AI assistant is currently unavailable — please use the ticket form above to reach our team.",
+      handoff: false,
+    });
+  }
+  if (integration?.ai_system_prompt_override) {
+    systemPrompt = integration.ai_system_prompt_override;
   }
 
   const messages = toApiMessages(parsed.messages);

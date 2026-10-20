@@ -12,7 +12,7 @@ const REFUSAL_REPLY = "Sorry, I can't help with that here. Let me connect you wi
 
 export function validateChatRequest(
   body: unknown,
-): { ok: true; organizationId: string | null; messages: ChatTurn[] } | { ok: false; error: string } {
+): { ok: true; organizationId: string; messages: ChatTurn[] } | { ok: false; error: string } {
   const b = body as { organizationId?: unknown; messages?: unknown } | null;
   if (!b || !Array.isArray(b.messages)) return { ok: false, error: "invalid_body" };
 
@@ -26,11 +26,10 @@ export function validateChatRequest(
     return { ok: false, error: "message_too_long" };
   }
 
-  return {
-    ok: true,
-    organizationId: typeof b.organizationId === "string" ? b.organizationId : null,
-    messages: b.messages as ChatTurn[],
-  };
+  // Required so the per-org ai_chat_enabled switch can never be skipped.
+  if (typeof b.organizationId !== "string" || !b.organizationId) return { ok: false, error: "missing_organization" };
+
+  return { ok: true, organizationId: b.organizationId, messages: b.messages as ChatTurn[] };
 }
 
 export function parseChatResult(resp: {
@@ -54,4 +53,10 @@ export function parseChatResult(resp: {
 export function toApiMessages(messages: ChatTurn[]): ChatTurn[] {
   const firstUser = messages.findIndex((m) => m.role === "user");
   return firstUser === -1 ? [] : messages.slice(firstUser);
+}
+
+// Bucket for the per-client AI chat rate limit (first hop of x-forwarded-for).
+export function rateLimitKey(headers: Headers): string {
+  const ip = headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  return `ip:${ip || "unknown"}`;
 }

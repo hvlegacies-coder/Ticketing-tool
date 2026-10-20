@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseChatResult, toApiMessages, validateChatRequest } from "./chatLogic";
+import { parseChatResult, rateLimitKey, toApiMessages, validateChatRequest } from "./chatLogic";
 
 describe("validateChatRequest", () => {
   it("rejects more than 30 messages", () => {
@@ -90,5 +90,24 @@ describe("toApiMessages", () => {
 
   it("returns an empty list when there is no user turn", () => {
     expect(toApiMessages([{ role: "assistant", content: "Hi!" }])).toEqual([]);
+  });
+});
+
+describe("validateChatRequest organization", () => {
+  it("rejects a request without organizationId", () => {
+    expect(validateChatRequest({ messages: [{ role: "user", content: "hi" }] })).toEqual({
+      ok: false,
+      error: "missing_organization",
+    });
+  });
+});
+
+describe("rateLimitKey", () => {
+  it("uses the first x-forwarded-for address", () => {
+    expect(rateLimitKey(new Headers({ "x-forwarded-for": "1.2.3.4, 10.0.0.1" }))).toBe("ip:1.2.3.4");
+  });
+
+  it("falls back to a shared bucket when no address is present", () => {
+    expect(rateLimitKey(new Headers())).toBe("ip:unknown");
   });
 });

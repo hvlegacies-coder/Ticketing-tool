@@ -30,6 +30,15 @@ describe("sendAiMessage", () => {
     });
   });
 
+  it("sends only the most recent 30 turns of a long chat", async () => {
+    invoke.mockResolvedValue({ data: { reply: "ok", handoff: false }, error: null });
+    const long = Array.from({ length: 40 }, (_, i) => ({ role: (i % 2 ? "assistant" : "user") as "user" | "assistant", content: String(i) }));
+    await sendAiMessage("org", long);
+    const sent = invoke.mock.calls[0][1].body.messages;
+    expect(sent).toHaveLength(30);
+    expect(sent[29].content).toBe("39");
+  });
+
   it("returns the fallback text when the function errors", async () => {
     invoke.mockResolvedValue({ data: null, error: new Error("boom") });
     await expect(sendAiMessage("org", [])).resolves.toEqual({ reply: AI_FALLBACK_TEXT, handoff: false });
