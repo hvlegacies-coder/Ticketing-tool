@@ -248,8 +248,11 @@ export default function Suggestions() {
                 <Input id="sg-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} maxLength={100} />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="sg-email">Email</Label>
+                <Label htmlFor="sg-email">
+                  Email <span className="font-normal text-muted-foreground">(private)</span>
+                </Label>
                 <Input id="sg-email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+                <p className="text-[11px] text-muted-foreground">Never shown publicly — only our team sees it.</p>
               </div>
             </div>
             <div className="space-y-1">
