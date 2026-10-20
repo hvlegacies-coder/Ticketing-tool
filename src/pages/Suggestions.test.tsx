@@ -18,12 +18,17 @@ const row = {
   vote_count: 3,
   author_name: "Ann",
   created_at: "2026-10-20T00:00:00Z",
+  staff_response: "Shipping next month",
+  responded_at: "2026-10-21T00:00:00Z",
 };
+const doneRow = { ...row, id: "s2", title: "Export CSV", status: "Done", staff_response: null, responded_at: null };
+const similar = vi.hoisted(() => ({ rows: [] as unknown[] }));
 
 function setup(voteResult: { data: unknown; error: unknown }, listError: unknown = null) {
   rpc.mockImplementation((fn: string) => {
     if (fn === "get_org_public_profile") return Promise.resolve({ data: [{ id: "o", name: "HV", slug: "hv", logo_url: null }], error: null });
-    if (fn === "get_public_suggestions") return Promise.resolve(listError ? { data: null, error: listError } : { data: [row], error: null });
+    if (fn === "get_public_suggestions") return Promise.resolve(listError ? { data: null, error: listError } : { data: [row, doneRow], error: null });
+    if (fn === "find_similar_suggestions") return Promise.resolve({ data: similar.rows, error: null });
     if (fn === "vote_suggestion") return Promise.resolve(voteResult);
     return Promise.resolve({ data: null, error: null });
   });
@@ -64,5 +69,38 @@ describe("Suggestions voting", () => {
     expect(
       await screen.findByText("Couldn't load suggestions. Please refresh the page.", {}, { timeout: 4000 }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("Suggestions v2", () => {
+  it("shows the official response on the card", async () => {
+    setup({ data: 4, error: null });
+    expect(await screen.findByText("Shipping next month")).toBeInTheDocument();
+    expect(screen.getByText("Official response")).toBeInTheDocument();
+  });
+
+  it("groups suggestions into roadmap columns", async () => {
+    setup({ data: 4, error: null });
+    await screen.findByText("Dark mode");
+    fireEvent.click(screen.getByRole("button", { name: "Roadmap" }));
+    const planned = screen.getByRole("region", { name: "Planned" });
+    const done = screen.getByRole("region", { name: "Done" });
+    expect(planned).toHaveTextContent("Dark mode");
+    expect(done).toHaveTextContent("Export CSV");
+    expect(planned).not.toHaveTextContent("Export CSV");
+  });
+
+  it("looks up similar ideas once after typing settles", async () => {
+    similar.rows = [{ id: "s1", title: "Dark mode", status: "Planned", vote_count: 3 }];
+    setup({ data: 4, error: null });
+    fireEvent.click(await screen.findByRole("button", { name: /Suggest an improvement/ }));
+    const title = screen.getByLabelText("Title");
+    fireEvent.change(title, { target: { value: "dar" } });
+    fireEvent.change(title, { target: { value: "dark" } });
+    fireEvent.change(title, { target: { value: "dark mo" } });
+    expect(await screen.findByText("Similar ideas — vote instead?")).toBeInTheDocument();
+    const calls = rpc.mock.calls.filter(([fn]) => fn === "find_similar_suggestions");
+    expect(calls).toHaveLength(1);
+    expect(calls[0][1]).toEqual({ _slug: "hv", _query: "dark mo" });
   });
 });

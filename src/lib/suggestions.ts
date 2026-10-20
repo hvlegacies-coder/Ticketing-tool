@@ -44,3 +44,27 @@ export function setVoterEmail(email: string): void {
     // storage blocked: the voter is asked again next time
   }
 }
+
+export const ROADMAP_COLUMNS = ["Planned", "In progress", "Done"] as const;
+type RoadmapColumn = (typeof ROADMAP_COLUMNS)[number];
+
+export function groupRoadmap<T extends { status: string }>(rows: T[]): Record<RoadmapColumn, T[]> {
+  const groups: Record<RoadmapColumn, T[]> = { Planned: [], "In progress": [], Done: [] };
+  for (const r of rows) {
+    if ((ROADMAP_COLUMNS as readonly string[]).includes(r.status)) groups[r.status as RoadmapColumn].push(r);
+  }
+  return groups;
+}
+
+/** Vote-button glow intensity: 0 (<5), 1 (5-19), 2 (20-49), 3 (50+). */
+export function glowLevel(votes: number): 0 | 1 | 2 | 3 {
+  if (votes >= 50) return 3;
+  if (votes >= 20) return 2;
+  if (votes >= 5) return 1;
+  return 0;
+}
+
+/** Progress-bar step: Under review 1 … Done 4 (of 4); Declined 0. */
+export function statusStep(status: string): number {
+  return status === "Declined" ? 0 : SUGGESTION_STATUSES.indexOf(status as SuggestionStatus) + 1;
+}

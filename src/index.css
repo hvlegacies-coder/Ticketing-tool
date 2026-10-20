@@ -172,6 +172,18 @@
   .animate-wave {
     animation: wave 1s ease-in-out infinite;
   }
+
+  /* Animated cyan→violet→gold border for featured cards (wrap content in p-[1px]). */
+  .neon-border {
+    background: linear-gradient(120deg, hsl(186 100% 50%), hsl(271 91% 65%), #f5c84c, hsl(186 100% 50%));
+    background-size: 300% 300%;
+    animation: neon-shift 6s linear infinite;
+  }
+}
+
+@keyframes neon-shift {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 300% 50%; }
 }
 
 @keyframes wave {
@@ -180,7 +192,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .animate-wave {
+  .animate-wave,
+  .neon-border {
     animation: none;
   }
   .glow-cyan,

@@ -1,5 +1,14 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { getVoterEmail, mapSuggestionError, setVoterEmail, suggestionSchema } from "./suggestions";
+import {
+  SUGGESTION_STATUSES,
+  getVoterEmail,
+  glowLevel,
+  groupRoadmap,
+  mapSuggestionError,
+  setVoterEmail,
+  statusStep,
+  suggestionSchema,
+} from "./suggestions";
 
 const valid = { name: "A", email: "a@x.com", title: "Dark mode", description: "d", category: "App" };
 
@@ -52,5 +61,43 @@ describe("voter email", () => {
 
   it("returns null when nothing is stored", () => {
     expect(getVoterEmail()).toBeNull();
+  });
+});
+
+describe("groupRoadmap", () => {
+  it("buckets suggestions into the three roadmap columns and drops the rest", () => {
+    const rows = [
+      { id: "1", status: "Planned" },
+      { id: "2", status: "In progress" },
+      { id: "3", status: "Done" },
+      { id: "4", status: "Under review" },
+      { id: "5", status: "Declined" },
+      { id: "6", status: "Planned" },
+    ];
+    const g = groupRoadmap(rows);
+    expect(g.Planned.map((r) => r.id)).toEqual(["1", "6"]);
+    expect(g["In progress"].map((r) => r.id)).toEqual(["2"]);
+    expect(g.Done.map((r) => r.id)).toEqual(["3"]);
+  });
+});
+
+describe("glowLevel", () => {
+  it.each([
+    [0, 0],
+    [4, 0],
+    [5, 1],
+    [19, 1],
+    [20, 2],
+    [49, 2],
+    [50, 3],
+    [500, 3],
+  ])("%i votes -> level %i", (votes, level) => {
+    expect(glowLevel(votes)).toBe(level);
+  });
+});
+
+describe("statusStep", () => {
+  it("maps statuses to progress steps 1-5 and Declined to 0", () => {
+    expect(SUGGESTION_STATUSES.map(statusStep)).toEqual([1, 2, 3, 4, 0]);
   });
 });

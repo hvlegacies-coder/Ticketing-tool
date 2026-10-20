@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { formatDistanceToNow } from "date-fns";
 import { motion, useReducedMotion } from "framer-motion";
-import { ChevronUp, Lightbulb, Loader2, Plus } from "lucide-react";
+import { Lightbulb, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { PortalHeader } from "@/components/PortalHeader";
-import { Badge } from "@/components/ui/badge";
+import { AiOrb } from "@/components/chat/AiOrb";
+import { RoadmapBoard } from "@/components/suggestions/RoadmapBoard";
+import { SimilarIdeas } from "@/components/suggestions/SimilarIdeas";
+import { type PublicSuggestion, SuggestionCard } from "@/components/suggestions/SuggestionCard";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -15,7 +17,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  STATUS_STYLES,
   SUGGESTION_CATEGORIES,
   SUGGESTION_STATUSES,
   type SuggestionStatus,
@@ -26,14 +27,20 @@ import {
 } from "@/lib/suggestions";
 import NotFound from "@/pages/NotFound";
 
-type Sort = "top" | "new";
+type View = "top" | "new" | "roadmap";
+const VIEWS: { id: View; label: string }[] = [
+  { id: "top", label: "Top" },
+  { id: "new", label: "New" },
+  { id: "roadmap", label: "Roadmap" },
+];
 const EMPTY_FORM = { name: "", email: "", title: "", description: "", category: "App" };
 
 export default function Suggestions() {
   const { orgSlug } = useParams<{ orgSlug: string }>();
   const queryClient = useQueryClient();
   const reduceMotion = useReducedMotion();
-  const [sort, setSort] = useState<Sort>("top");
+  const [view, setView] = useState<View>("top");
+  const sort = view === "new" ? "new" : "top";
   const [statusFilter, setStatusFilter] = useState<"All" | SuggestionStatus>("All");
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -60,7 +67,7 @@ export default function Suggestions() {
     queryFn: async () => {
       const { data, error } = await supabase.rpc("get_public_suggestions", { _slug: orgSlug!, _sort: sort });
       if (error) throw error;
-      return data ?? [];
+      return (data ?? []) as PublicSuggestion[];
     },
     enabled: !!org,
   });
@@ -150,7 +157,7 @@ export default function Suggestions() {
     <div className="grid-bg min-h-screen">
       <PortalHeader orgName={org.name} orgLogoUrl={org.logo_url} homeHref={`/support/${orgSlug}`} orgSlug={orgSlug} />
 
-      <main className="container max-w-3xl py-10">
+      <main className={`container py-10 ${view === "roadmap" ? "max-w-6xl" : "max-w-3xl"}`}>
         <motion.div initial={reduceMotion ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
           <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
@@ -166,18 +173,19 @@ export default function Suggestions() {
           </div>
 
           <div className="mb-4 flex flex-wrap items-center gap-2">
-            <div className="glass inline-flex rounded-full p-1" role="group" aria-label="Sort">
-              {(["top", "new"] as const).map((s) => (
+            <div className="glass inline-flex rounded-full p-1" role="group" aria-label="View">
+              {VIEWS.map((v) => (
                 <button
-                  key={s}
-                  onClick={() => setSort(s)}
-                  aria-pressed={sort === s}
-                  className={`rounded-full px-3 py-1 text-sm ${sort === s ? "bg-cyan/15 text-cyan" : "text-muted-foreground"}`}
+                  key={v.id}
+                  onClick={() => setView(v.id)}
+                  aria-pressed={view === v.id}
+                  className={`rounded-full px-3 py-1 text-sm ${view === v.id ? "bg-cyan/15 text-cyan" : "text-muted-foreground"}`}
                 >
-                  {s === "top" ? "Top" : "New"}
+                  {v.label}
                 </button>
               ))}
             </div>
+            {view !== "roadmap" && (
             <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
               <SelectTrigger className="h-9 w-44" aria-label="Filter by status">
                 <SelectValue />
@@ -189,6 +197,7 @@ export default function Suggestions() {
                 ))}
               </SelectContent>
             </Select>
+            )}
           </div>
 
           {isError ? (
@@ -197,37 +206,26 @@ export default function Suggestions() {
             </div>
           ) : isLoading ? (
             <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-cyan" /></div>
-          ) : visible.length === 0 ? (
-            <div className="glass rounded-2xl py-16 text-center text-muted-foreground">
-              No suggestions yet. Be the first to share an idea!
+          ) : suggestions.length === 0 ? (
+            <div className="glass flex flex-col items-center gap-4 rounded-2xl py-16 text-center">
+              <AiOrb className="h-14 w-14" />
+              <p className="font-display text-lg">Be the first to shape the system</p>
+              <p className="text-sm text-muted-foreground">Your idea could be the next thing we build.</p>
             </div>
+          ) : view === "roadmap" ? (
+            <RoadmapBoard rows={suggestions} voted={voted} onVote={handleVote} />
+          ) : visible.length === 0 ? (
+            <div className="glass rounded-2xl py-16 text-center text-muted-foreground">No suggestions with this status.</div>
           ) : (
             <ul className="space-y-3">
-              {visible.map((s) => (
-                <li key={s.id} className="glass flex gap-4 rounded-2xl p-4 transition-shadow hover:shadow-elevated">
-                  <button
-                    onClick={() => handleVote(s.id)}
-                    disabled={voted.has(s.id)}
-                    aria-label={`Upvote ${s.title} (${s.vote_count} votes)`}
-                    className={`flex h-14 w-12 shrink-0 flex-col items-center justify-center rounded-xl border text-sm font-bold transition ${
-                      voted.has(s.id)
-                        ? "border-[#f5c84c] bg-gradient-gold text-primary-foreground"
-                        : "border-[#f5c84c]/50 text-gold hover:glow-gold"
-                    }`}
-                  >
-                    <ChevronUp className="h-4 w-4" />
-                    {s.vote_count}
-                  </button>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="font-sans text-base font-semibold">{s.title}</h2>
-                      <Badge variant="outline" className={STATUS_STYLES[s.status as SuggestionStatus]}>{s.status}</Badge>
-                    </div>
-                    <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{s.description}</p>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      {s.category} · {s.author_name} · {formatDistanceToNow(new Date(s.created_at), { addSuffix: true })}
-                    </p>
-                  </div>
+              {visible.map((s, i) => (
+                <li key={s.id}>
+                  <SuggestionCard
+                    s={s}
+                    voted={voted.has(s.id)}
+                    onVote={handleVote}
+                    featured={view === "top" && statusFilter === "All" && i < 3 && s.vote_count > 0}
+                  />
                 </li>
               ))}
             </ul>
@@ -259,6 +257,7 @@ export default function Suggestions() {
               <Label htmlFor="sg-title">Title</Label>
               <Input id="sg-title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} maxLength={140} />
             </div>
+            <SimilarIdeas orgSlug={orgSlug!} title={form.title} voted={voted} onVote={handleVote} />
             <div className="space-y-1">
               <Label htmlFor="sg-category">Category</Label>
               <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v })}>
