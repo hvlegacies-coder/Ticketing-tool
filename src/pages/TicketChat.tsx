@@ -42,7 +42,7 @@ const TicketChat = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <PortalHeader orgName={ticket.organization_name} homeHref={`/t/${token}`} />
+      <PortalHeader orgName={ticket.organization_name} homeHref={`/t/${token}`} orgSlug={ticket.organization_slug ?? undefined} />
       <div className="container max-w-2xl py-8">
         <Button variant="ghost" size="sm" asChild className="mb-6">
           <Link to={`/support/${ticket.organization_slug}`}>

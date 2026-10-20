@@ -64,7 +64,7 @@ const SupportPortal = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <PortalHeader orgName={org.name} orgLogoUrl={org.logo_url} homeHref={`/support/${orgSlug}`} />
+      <PortalHeader orgName={org.name} orgLogoUrl={org.logo_url} homeHref={`/support/${orgSlug}`} orgSlug={orgSlug} />
       <HeroSection orgName={org.name} />
 
       <section id="ticket-form" className="py-12 lg:py-16">

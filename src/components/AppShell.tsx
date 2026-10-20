@@ -8,6 +8,7 @@ import {
   LogOut,
   ChevronDown,
   Building2,
+  Lightbulb,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrganization, useMyOrganizations } from "@/hooks/useOrganization";
@@ -41,6 +42,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const nav: NavItem[] = [
     { to: `/app/${orgSlug}/dashboard`, label: "Dashboard", icon: LayoutDashboard, allow: ["owner", "admin", "agent", "viewer"] },
     { to: `/app/${orgSlug}/analytics`, label: "Analytics", icon: BarChart3, allow: ["owner", "admin", "agent", "viewer"] },
+    { to: `/app/${orgSlug}/suggestions`, label: "Suggestions", icon: Lightbulb, allow: ["owner", "admin", "agent", "viewer"] },
     { to: `/app/${orgSlug}/canned-responses`, label: "Canned Responses", icon: MessageSquareText, allow: ["owner", "admin", "agent"] },
     { to: `/app/${orgSlug}/team`, label: "Team", icon: Users, allow: ["owner", "admin"] },
     { to: `/app/${orgSlug}/settings`, label: "Settings", icon: SettingsIcon, allow: ["owner", "admin"] },

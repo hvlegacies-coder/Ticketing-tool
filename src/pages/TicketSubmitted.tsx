@@ -11,7 +11,7 @@ const TicketSubmitted = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <PortalHeader homeHref={`/support/${orgSlug}`} />
+      <PortalHeader homeHref={`/support/${orgSlug}`} orgSlug={orgSlug} />
       <div className="container flex items-center justify-center py-20">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}

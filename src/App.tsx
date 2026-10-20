@@ -20,6 +20,8 @@ import TicketDetails from "./pages/TicketDetails";
 import Analytics from "./pages/Analytics";
 import Team from "./pages/Team";
 import CannedResponses from "./pages/CannedResponses";
+import Suggestions from "./pages/Suggestions";
+import AdminSuggestions from "./pages/AdminSuggestions";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
@@ -58,6 +60,7 @@ const App = () => (
             {/* Public, org-branded support portal */}
             <Route path="/support/:orgSlug" element={<SupportPortal />} />
             <Route path="/support/:orgSlug/ticket-submitted" element={<TicketSubmitted />} />
+            <Route path="/support/:orgSlug/suggestions" element={<Suggestions />} />
             <Route path="/t/:token" element={<TicketChat />} />
 
             {/* Authenticated app, scoped to one organization */}
@@ -83,6 +86,14 @@ const App = () => (
                 element={
                   <OrgProtectedRoute>
                     <Analytics />
+                  </OrgProtectedRoute>
+                }
+              />
+              <Route
+                path="suggestions"
+                element={
+                  <OrgProtectedRoute>
+                    <AdminSuggestions />
                   </OrgProtectedRoute>
                 }
               />
