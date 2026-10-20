@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/hooks/useOrganization";
+import { isValidWebhookUrl } from "@/lib/webhookUrl";
 import { toast } from "sonner";
 
 const Settings = () => {
@@ -71,6 +72,7 @@ const Settings = () => {
   const [mondayToken, setMondayToken] = useState("");
   const [aiEnabled, setAiEnabled] = useState(true);
   const [aiPrompt, setAiPrompt] = useState("");
+  const [ghlWebhookUrl, setGhlWebhookUrl] = useState("");
   const [savingIntegration, setSavingIntegration] = useState(false);
 
   useEffect(() => {
@@ -79,6 +81,7 @@ const Settings = () => {
       setMondayGroupId(integration.monday_group_id ?? "");
       setAiEnabled(integration.ai_chat_enabled);
       setAiPrompt(integration.ai_system_prompt_override ?? "");
+      setGhlWebhookUrl(integration.ghl_webhook_url ?? "");
     }
   }, [integration]);
 
@@ -109,8 +112,10 @@ const Settings = () => {
     else queryClient.invalidateQueries({ queryKey: ["sla-policies", orgId] });
   };
 
+  const ghlUrlInvalid = ghlWebhookUrl.trim() !== "" && !isValidWebhookUrl(ghlWebhookUrl.trim());
+
   const handleSaveIntegration = async () => {
-    if (!orgId) return;
+    if (!orgId || ghlUrlInvalid) return;
     setSavingIntegration(true);
     const { error } = await supabase.rpc("upsert_org_integration_settings", {
       _org_id: orgId,
@@ -119,6 +124,7 @@ const Settings = () => {
       _monday_group_id: mondayGroupId || null,
       _ai_chat_enabled: aiEnabled,
       _ai_system_prompt_override: aiPrompt || null,
+      _ghl_webhook_url: ghlWebhookUrl.trim() || null,
     });
     if (error) toast.error(error.message);
     else {
@@ -290,7 +296,26 @@ const Settings = () => {
             />
           </div>
 
-          <Button onClick={handleSaveIntegration} disabled={savingIntegration} className="bg-gradient-gold hover:opacity-90">
+          <div className="space-y-1.5">
+            <Label htmlFor="ghlWebhookUrl">GoHighLevel webhook URL</Label>
+            <Input
+              id="ghlWebhookUrl"
+              type="url"
+              value={ghlWebhookUrl}
+              onChange={(e) => setGhlWebhookUrl(e.target.value)}
+              placeholder="https://services.leadconnectorhq.com/hooks/..."
+              aria-invalid={ghlUrlInvalid}
+            />
+            {ghlUrlInvalid ? (
+              <p className="text-xs text-destructive">Must be an https:// URL.</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                We POST here when a customer asks for an agent and on every new customer chat message.
+              </p>
+            )}
+          </div>
+
+          <Button onClick={handleSaveIntegration} disabled={savingIntegration || ghlUrlInvalid} className="bg-gradient-gold hover:opacity-90">
             {savingIntegration ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
             Save Integration Settings
           </Button>

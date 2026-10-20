@@ -6,14 +6,12 @@ import {
   MessageSquareText,
   Settings as SettingsIcon,
   LogOut,
-  Moon,
-  Sun,
   ChevronDown,
   Building2,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrganization, useMyOrganizations } from "@/hooks/useOrganization";
-import { useTheme } from "@/components/ThemeProvider";
+import { NotificationBell } from "@/components/NotificationBell";
 import { Button } from "@/components/ui/button";
 import { ROLE_LABELS, type OrgRole } from "@/lib/organization";
 import {
@@ -39,7 +37,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { signOut } = useAuth();
   const { organization, role } = useOrganization();
   const { data: myOrgs } = useMyOrganizations();
-  const { theme, setTheme } = useTheme();
 
   const nav: NavItem[] = [
     { to: `/app/${orgSlug}/dashboard`, label: "Dashboard", icon: LayoutDashboard, allow: ["owner", "admin", "agent", "viewer"] },
@@ -116,15 +113,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </DropdownMenuContent>
             </DropdownMenu>
           )}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start"
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-          >
-            {theme === "dark" ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
-            {theme === "dark" ? "Light mode" : "Dark mode"}
-          </Button>
           <Button variant="ghost" size="sm" className="w-full justify-start text-muted-foreground" onClick={handleSignOut}>
             <LogOut className="mr-2 h-4 w-4" />
             Sign out
@@ -133,12 +121,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex h-14 items-center justify-between border-b bg-card px-4 md:hidden">
-          <span className="font-display font-semibold">{organization?.name}</span>
-          <Button variant="ghost" size="icon" onClick={handleSignOut}>
-            <LogOut className="h-4 w-4" />
-          </Button>
-        </div>
+        <header className="flex h-14 items-center justify-between gap-2 border-b bg-card/80 px-4 backdrop-blur">
+          <span className="font-display font-semibold md:invisible">{organization?.name}</span>
+          <div className="flex items-center gap-1">
+            <NotificationBell orgId={organization?.id} orgSlug={orgSlug} />
+            <Button variant="ghost" size="icon" onClick={handleSignOut} className="md:hidden" aria-label="Sign out">
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
+        </header>
         <main className="flex-1 overflow-y-auto">{children}</main>
       </div>
     </div>

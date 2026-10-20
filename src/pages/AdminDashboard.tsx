@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import { motion } from "framer-motion";
@@ -18,7 +18,6 @@ import { ISSUE_CATEGORIES } from "@/lib/mondayConfig";
 import { useOrganization } from "@/hooks/useOrganization";
 import { useAuth } from "@/hooks/useAuth";
 import { getSlaState } from "@/lib/sla";
-import { toast } from "sonner";
 
 const AdminDashboard = () => {
   const { organization, role } = useOrganization();
@@ -70,35 +69,6 @@ const AdminDashboard = () => {
     },
     enabled: !!orgId,
   });
-
-  // Listen for new client messages in realtime
-  useEffect(() => {
-    if (!orgId) return;
-    const channel = supabase
-      .channel(`admin-new-messages-${orgId}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "chat_messages", filter: "sender_type=eq.client" },
-        (payload) => {
-          const msg = payload.new as { ticket_id: string; sender_name: string; message: string };
-          toast.info(`New message from ${msg.sender_name}`, {
-            description: msg.message.slice(0, 80),
-            action: {
-              label: "View",
-              onClick: () => {
-                window.location.href = `/app/${organization?.slug}/ticket/${msg.ticket_id}`;
-              },
-            },
-          });
-          queryClient.invalidateQueries({ queryKey: ["tickets", orgId] });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [orgId, organization?.slug, queryClient]);
 
   const filtered = useMemo(() => {
     return tickets.filter((t) => {
