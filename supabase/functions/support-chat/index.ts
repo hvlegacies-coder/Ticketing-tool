@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import Anthropic from "npm:@anthropic-ai/sdk";
+import { HANDOFF_TOOL_NAME, parseChatResult, toApiMessages, validateChatRequest } from "../_shared/chatLogic.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -51,7 +52,7 @@ We are virtual, professional, supportive, opportunity-driven, and focused on lon
 - Document Upload Form: https://api.leadconnectorhq.com/widget/form/Y7UZVEVsSjSxi2q7oAv0
 
 **Support Ticket Portal:**
-- Clients can submit support tickets at: https://ticket-sync-co.lovable.app/
+- Clients can submit support tickets on this support page.
 - They can also chat with the AI assistant for help before submitting a ticket.
 
 === TAX PREPARER OPPORTUNITY ===
@@ -142,96 +143,90 @@ Your approach:
 
 Keep responses short (2-4 sentences). Never ask multiple questions at once. Be warm but professional. If someone asks about Higher View Taxes services, pricing, or how things work, answer confidently from the knowledge base.`;
 
+const HANDOFF_INSTRUCTION = `
+
+If the customer asks for a human, an agent, or a real person, or you cannot resolve their issue, call ${HANDOFF_TOOL_NAME}. Keep replies under 120 words.`;
+
+const requestHumanAgentTool = {
+  name: HANDOFF_TOOL_NAME,
+  description:
+    "Connect the customer with a human support agent. Use when the customer asks for a person or you cannot resolve the issue.",
+  strict: true,
+  input_schema: {
+    type: "object" as const,
+    properties: { reason: { type: "string", description: "Why the customer needs a human." } },
+    required: ["reason"],
+    additionalProperties: false,
+  },
+};
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+
+const anthropic = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY") });
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
+  let body: unknown;
   try {
-    const { messages, organizationId } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    body = await req.json();
+  } catch {
+    return json({ error: "invalid_body" }, 400);
+  }
+  const parsed = validateChatRequest(body);
+  if (!parsed.ok) return json({ error: parsed.error }, 400);
 
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
-    }
-
-    let systemPrompt = DEFAULT_SYSTEM_PROMPT;
-
-    if (organizationId) {
-      const supabaseAdmin = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-      );
-      const { data: integration } = await supabaseAdmin
-        .from("organization_integrations")
-        .select("ai_chat_enabled, ai_system_prompt_override")
-        .eq("organization_id", organizationId)
-        .maybeSingle();
-
-      if (integration?.ai_chat_enabled === false) {
-        return new Response(
-          JSON.stringify({ content: "Our AI assistant is currently unavailable — please use the ticket form above to reach our team." }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      if (integration?.ai_system_prompt_override) {
-        systemPrompt = integration.ai_system_prompt_override;
-      }
-    }
-
-    const response = await fetch(
-      "https://ai.gateway.lovable.dev/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
-          messages: [
-            { role: "system", content: systemPrompt },
-            ...messages.map((m: { role: string; content: string }) => ({
-              role: m.role,
-              content: m.content,
-            })),
-          ],
-        }),
-      }
+  let systemPrompt = DEFAULT_SYSTEM_PROMPT;
+  if (parsed.organizationId) {
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
+    const { data: integration } = await supabaseAdmin
+      .from("organization_integrations")
+      .select("ai_chat_enabled, ai_system_prompt_override")
+      .eq("organization_id", parsed.organizationId)
+      .maybeSingle();
 
-    if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "AI service requires payment. Please contact support." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      const errText = await response.text();
-      console.error("AI gateway error:", response.status, errText);
-      throw new Error(`AI gateway error: ${response.status}`);
+    if (integration?.ai_chat_enabled === false) {
+      return json({
+        reply: "Our AI assistant is currently unavailable — please use the ticket form above to reach our team.",
+        handoff: false,
+      });
     }
+    if (integration?.ai_system_prompt_override) {
+      systemPrompt = integration.ai_system_prompt_override;
+    }
+  }
 
-    const data = await response.json();
-    const content =
-      data.choices?.[0]?.message?.content || "I'm sorry, I couldn't process that.";
+  const messages = toApiMessages(parsed.messages);
+  if (messages.length === 0) return json({ error: "invalid_body" }, 400);
 
-    return new Response(
-      JSON.stringify({ content }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+  try {
+    const response = await anthropic.beta.messages.create({
+      model: "claude-opus-5-5",
+      max_tokens: 2048,
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default",
+      output_config: { effort: "low" },
+      system: systemPrompt + HANDOFF_INSTRUCTION,
+      tools: [requestHumanAgentTool],
+      tool_choice: { type: "auto" },
+      messages,
+    });
+    return json(parseChatResult(response));
   } catch (error: unknown) {
-    console.error("support-chat error:", error);
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    return new Response(
-      JSON.stringify({ error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    if (error instanceof Anthropic.APIError) {
+      console.error("support-chat Claude API error:", error.status, error.message);
+    } else {
+      console.error("support-chat error:", error);
+    }
+    return json({ error: "ai_unavailable" }, 502);
   }
 });
