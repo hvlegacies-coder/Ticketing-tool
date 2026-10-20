@@ -22,6 +22,7 @@ import Team from "./pages/Team";
 import CannedResponses from "./pages/CannedResponses";
 import Suggestions from "./pages/Suggestions";
 import AdminSuggestions from "./pages/AdminSuggestions";
+import LiveChats from "./pages/LiveChats";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
@@ -86,6 +87,14 @@ const App = () => (
                 element={
                   <OrgProtectedRoute>
                     <Analytics />
+                  </OrgProtectedRoute>
+                }
+              />
+              <Route
+                path="live-chats"
+                element={
+                  <OrgProtectedRoute allow={["owner", "admin", "agent"]}>
+                    <LiveChats />
                   </OrgProtectedRoute>
                 }
               />

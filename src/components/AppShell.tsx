@@ -1,21 +1,15 @@
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
-import {
-  LayoutDashboard,
-  BarChart3,
-  Users,
-  MessageSquareText,
-  Settings as SettingsIcon,
-  LogOut,
-  ChevronDown,
-  Building2,
-  Lightbulb,
-} from "lucide-react";
+import { ChevronsUpDown, Menu } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrganization, useMyOrganizations } from "@/hooks/useOrganization";
+import { useStaffNotifications } from "@/hooks/useStaffNotifications";
+import { useSuggestionsBadge } from "@/hooks/useSuggestionsBadge";
+import { NeonRail } from "@/components/NeonRail";
 import { NotificationBell } from "@/components/NotificationBell";
 import { Button } from "@/components/ui/button";
-import { ROLE_LABELS, type OrgRole } from "@/lib/organization";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,122 +18,96 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
-interface NavItem {
-  to: string;
-  label: string;
-  icon: typeof LayoutDashboard;
-  allow: OrgRole[];
-}
+import { buildNavSections } from "@/lib/navigation";
+import { ROLE_LABELS } from "@/lib/organization";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { orgSlug } = useParams<{ orgSlug: string }>();
   const location = useLocation();
   const navigate = useNavigate();
-  const { signOut } = useAuth();
+  const { user, signOut } = useAuth();
   const { organization, role } = useOrganization();
   const { data: myOrgs } = useMyOrganizations();
   const reduceMotion = useReducedMotion();
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const nav: NavItem[] = [
-    { to: `/app/${orgSlug}/dashboard`, label: "Dashboard", icon: LayoutDashboard, allow: ["owner", "admin", "agent", "viewer"] },
-    { to: `/app/${orgSlug}/analytics`, label: "Analytics", icon: BarChart3, allow: ["owner", "admin", "agent", "viewer"] },
-    { to: `/app/${orgSlug}/suggestions`, label: "Suggestions", icon: Lightbulb, allow: ["owner", "admin", "agent", "viewer"] },
-    { to: `/app/${orgSlug}/canned-responses`, label: "Canned Responses", icon: MessageSquareText, allow: ["owner", "admin", "agent"] },
-    { to: `/app/${orgSlug}/team`, label: "Team", icon: Users, allow: ["owner", "admin"] },
-    { to: `/app/${orgSlug}/settings`, label: "Settings", icon: SettingsIcon, allow: ["owner", "admin"] },
-  ];
+  // The shell owns the single realtime subscription for staff notifications.
+  const { items } = useStaffNotifications(organization?.id, { live: true });
+  const suggestions = useSuggestionsBadge(organization?.id);
+  const sections = buildNavSections(role, orgSlug, {
+    waiting: items.filter((n) => n.kind === "agent_requested").length,
+    unread: items.filter((n) => n.kind === "client_message").length,
+    suggestions,
+  });
 
   const handleSignOut = async () => {
     await signOut();
     navigate("/login");
   };
 
-  const visibleNav = nav.filter((item) => role && item.allow.includes(role));
+  const orgSwitcher =
+    myOrgs && myOrgs.length > 1 ? (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Switch organization">
+            <ChevronsUpDown className="h-3.5 w-3.5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-56">
+          <DropdownMenuLabel>Your organizations</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {myOrgs.map((o) => (
+            <DropdownMenuItem key={o.organization.id} onClick={() => navigate(`/app/${o.organization.slug}/dashboard`)}>
+              {o.organization.name}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    ) : null;
+
+  const rail = (onNavigate?: () => void) => (
+    <NeonRail
+      sections={sections}
+      activePath={location.pathname}
+      orgName={organization?.name}
+      orgLogoUrl={organization?.logo_url}
+      roleLabel={role ? ROLE_LABELS[role] : undefined}
+      userLabel={(user?.user_metadata?.full_name as string | undefined) ?? user?.email}
+      onSignOut={handleSignOut}
+      orgSwitcher={orgSwitcher}
+      onNavigate={onNavigate}
+    />
+  );
 
   return (
     <div className="flex min-h-screen grid-bg">
-      <aside className="hidden w-64 shrink-0 flex-col border-r border-cyan/20 bg-navy/80 backdrop-blur md:flex">
-        <div className="flex h-16 items-center gap-3 border-b px-5">
-          {organization?.logo_url ? (
-            <img src={organization.logo_url} alt={organization.name} className="h-8 w-8 rounded-md object-cover" />
-          ) : (
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-gradient-gold text-sm font-bold text-primary-foreground">
-              {organization?.name?.[0]?.toUpperCase() ?? "?"}
-            </div>
-          )}
-          <div className="min-w-0">
-            <p className="truncate font-display text-sm font-semibold">{organization?.name ?? "Loading…"}</p>
-            {role && <p className="text-xs text-muted-foreground">{ROLE_LABELS[role]}</p>}
-          </div>
-        </div>
-
-        <nav className="flex-1 space-y-1 p-3">
-          {visibleNav.map((item) => (
-            <Link
-              key={item.to}
-              to={item.to}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                location.pathname.startsWith(item.to)
-                  ? "bg-gradient-gold text-primary-foreground shadow-gold"
-                  : "text-muted-foreground hover:bg-cyan/10 hover:text-cyan"
-              }`}
-            >
-              <item.icon className="h-4 w-4" />
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-
-        <div className="space-y-1 border-t p-3">
-          {myOrgs && myOrgs.length > 1 && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="w-full justify-between">
-                  <span className="flex items-center gap-2">
-                    <Building2 className="h-4 w-4" />
-                    Switch org
-                  </span>
-                  <ChevronDown className="h-3 w-3" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-56">
-                <DropdownMenuLabel>Your organizations</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {myOrgs.map((o) => (
-                  <DropdownMenuItem
-                    key={o.organization.id}
-                    onClick={() => navigate(`/app/${o.organization.slug}/dashboard`)}
-                  >
-                    {o.organization.name}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-          <Button variant="ghost" size="sm" className="w-full justify-start text-muted-foreground" onClick={handleSignOut}>
-            <LogOut className="mr-2 h-4 w-4" />
-            Sign out
-          </Button>
-        </div>
+      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 border-r border-cyan/20 bg-navy/85 backdrop-blur md:block">
+        {rail()}
       </aside>
 
+      <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
+        <SheetContent side="left" className="w-72 border-cyan/20 bg-navy/95 p-0">
+          <SheetTitle className="sr-only">Navigation</SheetTitle>
+          {rail(() => setDrawerOpen(false))}
+        </SheetContent>
+      </Sheet>
+
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 items-center justify-between gap-2 border-b bg-card/80 px-4 backdrop-blur">
-          <span className="font-display font-semibold md:invisible">{organization?.name}</span>
-          <div className="flex items-center gap-1">
-            <NotificationBell orgId={organization?.id} orgSlug={orgSlug} />
-            <Button variant="ghost" size="icon" onClick={handleSignOut} className="md:hidden" aria-label="Sign out">
-              <LogOut className="h-4 w-4" />
+        <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-2 border-b border-cyan/15 bg-navy/70 px-4 backdrop-blur">
+          <div className="flex items-center gap-2 md:invisible">
+            <Button variant="ghost" size="icon" onClick={() => setDrawerOpen(true)} aria-label="Open navigation">
+              <Menu className="h-5 w-5" />
             </Button>
+            <span className="font-display text-sm font-semibold">{organization?.name}</span>
           </div>
+          <NotificationBell items={items} orgSlug={orgSlug} />
         </header>
         <motion.main
           key={location.pathname}
           initial={reduceMotion ? false : { opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.25 }}
-          className="flex-1 overflow-y-auto"
+          className="flex-1"
         >
           {children}
         </motion.main>

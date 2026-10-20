@@ -48,3 +48,12 @@ export const SLA_STATE_LABELS: Record<SlaState, string> = {
   met: "SLA Met",
   none: "No SLA",
 };
+
+/** Share (0-1) of the SLA window already used; null when there's no due date. */
+export function slaProgress(createdAt: string, dueAt: string | null, now = new Date()): number | null {
+  if (!dueAt) return null;
+  const start = new Date(createdAt).getTime();
+  const total = new Date(dueAt).getTime() - start;
+  if (total <= 0) return 1;
+  return Math.min(1, Math.max(0, (now.getTime() - start) / total));
+}

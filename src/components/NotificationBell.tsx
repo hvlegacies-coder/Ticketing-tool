@@ -10,11 +10,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useStaffNotifications } from "@/hooks/useStaffNotifications";
+import type { StaffNotification } from "@/hooks/useStaffNotifications";
 
-export function NotificationBell({ orgId, orgSlug }: { orgId: string | undefined; orgSlug: string | undefined }) {
+export function NotificationBell({ items, orgSlug }: { items: StaffNotification[]; orgSlug: string | undefined }) {
   const navigate = useNavigate();
-  const { items, count } = useStaffNotifications(orgId);
+  const count = items.length;
 
   return (
     <DropdownMenu>

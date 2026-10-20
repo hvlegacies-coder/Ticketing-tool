@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { format } from "date-fns";
-import { Eye, ExternalLink } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -19,9 +19,11 @@ import {
 } from "@/components/ui/select";
 import { StatusBadge } from "@/components/StatusBadge";
 import { supabase } from "@/integrations/supabase/client";
-import { getSlaState, SLA_STATE_STYLES, SLA_STATE_LABELS } from "@/lib/sla";
+import { getSlaState, SLA_STATE_STYLES, SLA_STATE_LABELS, slaProgress } from "@/lib/sla";
 import { toast } from "sonner";
 import type { Tables } from "@/integrations/supabase/types";
+import { AiOrb } from "@/components/chat/AiOrb";
+import { initials } from "@/lib/organization";
 
 export type TicketRow = Tables<"tickets"> & {
   assignee: { full_name: string | null; email: string | null } | null;
@@ -69,10 +71,8 @@ export function TicketTable({ tickets, isLoading, orgSlug, members = [], canAssi
 
   if (tickets.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed py-16">
-        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted">
-          <Eye className="h-6 w-6 text-muted-foreground" />
-        </div>
+      <div className="glass flex flex-col items-center justify-center rounded-2xl py-16">
+        <AiOrb className="h-14 w-14" />
         <h3 className="mt-4 font-display font-semibold">No tickets yet</h3>
         <p className="mt-1 text-sm text-muted-foreground">Tickets will appear here once submitted.</p>
       </div>
@@ -80,34 +80,43 @@ export function TicketTable({ tickets, isLoading, orgSlug, members = [], canAssi
   }
 
   return (
-    <div className="rounded-lg border bg-card shadow-card overflow-x-auto">
+    <div className="glass overflow-x-auto rounded-2xl">
       <Table>
         <TableHeader>
-          <TableRow className="bg-muted/50 hover:bg-muted/50">
-            <TableHead className="font-semibold">Date</TableHead>
-            <TableHead className="font-semibold">Client</TableHead>
-            <TableHead className="font-semibold">Title</TableHead>
-            <TableHead className="font-semibold">Tags</TableHead>
-            <TableHead className="font-semibold">Priority</TableHead>
-            <TableHead className="font-semibold">Status</TableHead>
-            <TableHead className="font-semibold">SLA</TableHead>
-            <TableHead className="font-semibold">Assigned</TableHead>
-            <TableHead className="font-semibold text-right">Actions</TableHead>
+          <TableRow className="border-cyan/15 hover:bg-transparent">
+            <TableHead className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Date</TableHead>
+            <TableHead className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Client</TableHead>
+            <TableHead className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Title</TableHead>
+            <TableHead className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Tags</TableHead>
+            <TableHead className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Priority</TableHead>
+            <TableHead className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Status</TableHead>
+            <TableHead className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">SLA</TableHead>
+            <TableHead className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Assigned</TableHead>
+            <TableHead className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {tickets.map((ticket) => {
             const isDone = ticket.status === "Resolved" || ticket.status === "Closed";
             const slaState = getSlaState(ticket.resolution_due_at, isDone, ticket.sla_breached);
+            const progress = slaProgress(ticket.created_at, ticket.resolution_due_at);
             return (
-              <TableRow key={ticket.id} className="group hover:bg-muted/30 transition-colors">
+              <TableRow key={ticket.id} className="group border-cyan/10 transition-colors hover:bg-cyan/[0.04]">
                 <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                   {format(new Date(ticket.created_at), "MMM d, yyyy")}
                 </TableCell>
                 <TableCell>
-                  <div>
-                    <p className="text-sm font-medium">{ticket.client_full_name}</p>
-                    <p className="text-xs text-muted-foreground">{ticket.company_name}</p>
+                  <div className="flex items-center gap-2.5">
+                    <span
+                      aria-hidden
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-cyan/30 to-violet/40 text-[11px] font-semibold ring-1 ring-cyan/40"
+                    >
+                      {initials(ticket.client_full_name)}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{ticket.client_full_name}</p>
+                      <p className="truncate text-xs text-muted-foreground">{ticket.company_name}</p>
+                    </div>
                   </div>
                 </TableCell>
                 <TableCell className="max-w-[200px]">
@@ -133,11 +142,21 @@ export function TicketTable({ tickets, isLoading, orgSlug, members = [], canAssi
                   <StatusBadge value={ticket.status} type="status" />
                 </TableCell>
                 <TableCell>
-                  <span
-                    className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${SLA_STATE_STYLES[slaState]}`}
-                  >
-                    {SLA_STATE_LABELS[slaState]}
-                  </span>
+                  <div className="space-y-1">
+                    <span
+                      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${SLA_STATE_STYLES[slaState]}`}
+                    >
+                      {SLA_STATE_LABELS[slaState]}
+                    </span>
+                    {!isDone && progress !== null && (
+                      <div className="h-1 w-20 overflow-hidden rounded-full bg-muted" aria-hidden>
+                        <div
+                          className={`h-full rounded-full ${progress >= 1 ? "bg-red-500" : progress > 0.75 ? "bg-gradient-gold" : "bg-gradient-neon"}`}
+                          style={{ width: `${Math.round(progress * 100)}%` }}
+                        />
+                      </div>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell>
                   {canAssign ? (

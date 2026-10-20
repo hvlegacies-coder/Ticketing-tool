@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Search } from "lucide-react";
-import { motion } from "framer-motion";
 import { AppShell } from "@/components/AppShell";
 import { TicketTable, type TicketRow } from "@/components/TicketTable";
 import { Input } from "@/components/ui/input";
@@ -18,6 +17,15 @@ import { ISSUE_CATEGORIES } from "@/lib/mondayConfig";
 import { useOrganization } from "@/hooks/useOrganization";
 import { useAuth } from "@/hooks/useAuth";
 import { getSlaState } from "@/lib/sla";
+import { KpiTile } from "@/components/dashboard/KpiTile";
+import { useStaffNotifications } from "@/hooks/useStaffNotifications";
+import { dailyCounts, weekOverWeek } from "@/lib/dashboardStats";
+
+const greeting = () => {
+  const h = new Date().getHours();
+  return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+};
+const deltaNote = (d: number | null) => (d === null ? "— vs last week" : `${d >= 0 ? "▲" : "▼"} ${Math.abs(d)}% vs last week`);
 
 const AdminDashboard = () => {
   const { organization, role } = useOrganization();
@@ -101,36 +109,47 @@ const AdminDashboard = () => {
     breached: tickets.filter((t) => t.sla_breached).length,
     unassigned: tickets.filter((t) => !t.assigned_to_user_id && t.status !== "Closed").length,
     open: tickets.filter((t) => t.status !== "Closed" && t.status !== "Resolved").length,
+    highOpen: tickets.filter(
+      (t) => t.status !== "Closed" && t.status !== "Resolved" && (t.priority === "High" || t.priority === "Critical"),
+    ).length,
   };
+  const trend = dailyCounts(tickets);
+  const delta = weekOverWeek(tickets);
+  const { items: staffItems } = useStaffNotifications(orgId);
+  const waitingCount = staffItems.filter((n) => n.kind === "agent_requested").length;
+  const firstName = (user?.user_metadata?.full_name as string | undefined)?.split(" ")[0];
 
   return (
     <AppShell>
       <div className="container py-8">
-        <div className="mb-8">
-          <h1 className="font-display text-3xl font-bold tracking-tight">Ticket Dashboard</h1>
-          <p className="mt-1 text-muted-foreground">Manage and track all support tickets for {organization?.name}.</p>
-          <div className="mt-3 h-0.5 w-12 rounded-full bg-gradient-gold" />
+        <div className="mb-8 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="font-display text-2xl font-bold tracking-[0.08em] sm:text-3xl">COMMAND CENTER</h1>
+            <p className="mt-1 text-muted-foreground">
+              {greeting()}
+              {firstName ? `, ${firstName}` : ""} · {organization?.name}
+            </p>
+          </div>
+          <span
+            className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] tracking-[0.14em] ${
+              waitingCount ? "border-[#f5c84c]/50 text-gold" : "border-cyan/30 text-cyan"
+            }`}
+          >
+            <span className={`h-2 w-2 rounded-full ${waitingCount ? "animate-pulse bg-[#f5c84c]" : "bg-cyan"}`} />
+            LIVE · {waitingCount} WAITING
+          </span>
         </div>
 
-        <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
-          {[
-            { label: "Total Tickets", value: stats.total, accent: "border-l-primary" },
-            { label: "Open", value: stats.open, accent: "border-l-info" },
-            { label: "Unassigned", value: stats.unassigned, accent: "border-l-warning" },
-            { label: "SLA Breached", value: stats.breached, accent: "border-l-urgent" },
-          ].map((stat, i) => (
-            <motion.div
-              key={stat.label}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
-              whileHover={{ y: -2 }}
-              className={`rounded-xl border border-l-4 ${stat.accent} bg-card p-4 shadow-card transition-shadow hover:shadow-elevated cursor-default`}
-            >
-              <p className="text-sm text-muted-foreground">{stat.label}</p>
-              <p className="mt-1 font-display text-2xl font-bold">{stat.value}</p>
-            </motion.div>
-          ))}
+        <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <KpiTile label="Total tickets" value={stats.total} tone="gold" trend={trend} note={deltaNote(delta)} />
+          <KpiTile label="Open" value={stats.open} tone="cyan" note={`${stats.highOpen} high priority`} />
+          <KpiTile label="Unassigned" value={stats.unassigned} tone="cyan" note={stats.unassigned ? "needs an owner" : "all assigned"} />
+          <KpiTile
+            label="SLA breached"
+            value={stats.breached}
+            tone="red"
+            note={stats.breached ? "needs action" : "all on track"}
+          />
         </div>
 
         <div className="mb-6 flex flex-wrap items-center gap-3">

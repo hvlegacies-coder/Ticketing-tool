@@ -47,7 +47,15 @@ function playChime() {
   }
 }
 
-export function useStaffNotifications(orgId: string | undefined): { items: StaffNotification[]; count: number } {
+/**
+ * Waiting/unread items for the staff bell. Pass live: true from exactly one
+ * place (AppShell) to own the realtime subscription; other callers share the
+ * cached queries.
+ */
+export function useStaffNotifications(
+  orgId: string | undefined,
+  { live = false }: { live?: boolean } = {},
+): { items: StaffNotification[]; count: number } {
   const queryClient = useQueryClient();
 
   const { data: waiting = [] } = useQuery({
@@ -86,7 +94,7 @@ export function useStaffNotifications(orgId: string | undefined): { items: Staff
   // Realtime rows are already limited to this user's orgs by RLS; tickets are
   // filtered to the current org server-side, messages are re-queried per org.
   useEffect(() => {
-    if (!orgId) return;
+    if (!orgId || !live) return;
     const refresh = () => {
       queryClient.invalidateQueries({ queryKey: ["staff-waiting", orgId] });
       queryClient.invalidateQueries({ queryKey: ["staff-unread", orgId] });
@@ -123,7 +131,7 @@ export function useStaffNotifications(orgId: string | undefined): { items: Staff
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [orgId, queryClient]);
+  }, [orgId, live, queryClient]);
 
   const items = useMemo(() => mergeNotifications(waiting, unread), [waiting, unread]);
   return { items, count: items.length };
