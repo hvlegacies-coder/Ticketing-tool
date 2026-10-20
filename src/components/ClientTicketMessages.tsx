@@ -13,6 +13,8 @@ interface ClientTicketMessagesProps {
   token: string;
   senderName: string;
   senderEmail: string;
+  /** Called once, with the agent name, when the first support reply appears. */
+  onSupportJoined?: (agentName: string) => void;
 }
 
 /**
@@ -21,11 +23,12 @@ interface ClientTicketMessagesProps {
  * realtime subscription — anon Postgres changes can't be scoped by token,
  * so this polls instead).
  */
-export function ClientTicketMessages({ token, senderName, senderEmail }: ClientTicketMessagesProps) {
+export function ClientTicketMessages({ token, senderName, senderEmail, onSupportJoined }: ClientTicketMessagesProps) {
   const queryClient = useQueryClient();
   const [newMessage, setNewMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const joinedRef = useRef(false);
 
   const { data: messages = [], isLoading } = useQuery({
     queryKey: ["client-ticket-messages", token],
@@ -42,6 +45,15 @@ export function ClientTicketMessages({ token, senderName, senderEmail }: ClientT
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  useEffect(() => {
+    if (joinedRef.current || !onSupportJoined) return;
+    const first = messages.find((m) => m.sender_type === "support");
+    if (first) {
+      joinedRef.current = true;
+      onSupportJoined(first.sender_name);
+    }
+  }, [messages, onSupportJoined]);
 
   const handleSend = async () => {
     if (!newMessage.trim() || isSending) return;
@@ -92,7 +104,7 @@ export function ClientTicketMessages({ token, senderName, senderEmail }: ClientT
                   className={`max-w-[80%] rounded-2xl px-4 py-2.5 transition-shadow hover:shadow-card ${
                     msg.sender_type === "client"
                       ? "bg-gradient-gold text-primary-foreground rounded-br-md"
-                      : "bg-muted text-foreground rounded-bl-md"
+                      : "border border-violet/40 bg-violet/10 text-foreground rounded-bl-md"
                   }`}
                 >
                   <div className="flex items-center gap-2 mb-1">
