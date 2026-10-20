@@ -54,7 +54,7 @@ const SupportPortal = () => {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="flex min-h-screen items-center justify-center grid-bg">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -63,7 +63,7 @@ const SupportPortal = () => {
   if (!org) return <NotFound />;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen grid-bg">
       <PortalHeader orgName={org.name} orgLogoUrl={org.logo_url} homeHref={`/support/${orgSlug}`} orgSlug={orgSlug} />
       <HeroSection orgName={org.name} />
 

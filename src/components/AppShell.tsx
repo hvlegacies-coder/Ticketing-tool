@@ -1,4 +1,5 @@
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { motion, useReducedMotion } from "framer-motion";
 import {
   LayoutDashboard,
   BarChart3,
@@ -38,6 +39,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { signOut } = useAuth();
   const { organization, role } = useOrganization();
   const { data: myOrgs } = useMyOrganizations();
+  const reduceMotion = useReducedMotion();
 
   const nav: NavItem[] = [
     { to: `/app/${orgSlug}/dashboard`, label: "Dashboard", icon: LayoutDashboard, allow: ["owner", "admin", "agent", "viewer"] },
@@ -56,8 +58,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const visibleNav = nav.filter((item) => role && item.allow.includes(role));
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <aside className="hidden w-64 shrink-0 flex-col border-r bg-card md:flex">
+    <div className="flex min-h-screen grid-bg">
+      <aside className="hidden w-64 shrink-0 flex-col border-r border-cyan/20 bg-navy/80 backdrop-blur md:flex">
         <div className="flex h-16 items-center gap-3 border-b px-5">
           {organization?.logo_url ? (
             <img src={organization.logo_url} alt={organization.name} className="h-8 w-8 rounded-md object-cover" />
@@ -80,7 +82,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                 location.pathname.startsWith(item.to)
                   ? "bg-gradient-gold text-primary-foreground shadow-gold"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  : "text-muted-foreground hover:bg-cyan/10 hover:text-cyan"
               }`}
             >
               <item.icon className="h-4 w-4" />
@@ -132,7 +134,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </Button>
           </div>
         </header>
-        <main className="flex-1 overflow-y-auto">{children}</main>
+        <motion.main
+          key={location.pathname}
+          initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25 }}
+          className="flex-1 overflow-y-auto"
+        >
+          {children}
+        </motion.main>
       </div>
     </div>
   );

@@ -56,7 +56,7 @@ const InviteAccept = () => {
 
   if (loadingPreview) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="flex min-h-screen items-center justify-center grid-bg">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -64,7 +64,7 @@ const InviteAccept = () => {
 
   if (!preview) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-background p-6 text-center">
+      <div className="flex min-h-screen flex-col items-center justify-center grid-bg p-6 text-center">
         <XCircle className="h-12 w-12 text-destructive" />
         <h1 className="mt-4 font-display text-xl font-bold">Invitation not found</h1>
         <p className="mt-2 text-sm text-muted-foreground">This invite link is invalid or has been revoked.</p>

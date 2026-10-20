@@ -1,14 +1,12 @@
 import { Link, useNavigate } from "react-router-dom";
-import { Moon, Sun, LogIn, LayoutDashboard, LogOut } from "lucide-react";
+import { LogIn, LayoutDashboard, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useTheme } from "@/components/ThemeProvider";
 import { useAuth } from "@/hooks/useAuth";
 import logo from "@/assets/logo.png";
 
 /** Public marketing header used on the landing, login, and signup pages. */
 export function Header() {
   const navigate = useNavigate();
-  const { theme, setTheme } = useTheme();
   const { user, signOut } = useAuth();
 
   const handleSignOut = async () => {
@@ -28,15 +26,6 @@ export function Header() {
         </Link>
 
         <nav className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            className="hover:bg-accent transition-colors"
-          >
-            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </Button>
-
           {user ? (
             <>
               <Button variant="ghost" size="sm" asChild className="hover:bg-accent transition-colors">

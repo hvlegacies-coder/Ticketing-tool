@@ -71,14 +71,14 @@ const AppHome = () => {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="flex min-h-screen items-center justify-center grid-bg">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen grid-bg">
       <header className="border-b bg-card/80 backdrop-blur-md">
         <div className="container flex h-16 items-center justify-between">
           <img src={logo} alt="Client Connect" className="h-9" />

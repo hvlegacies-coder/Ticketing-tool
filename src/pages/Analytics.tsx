@@ -11,7 +11,6 @@ import {
 } from "@/components/ui/chart";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/hooks/useOrganization";
-import { useTheme } from "@/components/ThemeProvider";
 import { categoricalColors, STATUS_COLORS } from "@/lib/chartColors";
 import { formatDuration } from "@/lib/sla";
 import { Loader2 } from "lucide-react";
@@ -25,9 +24,8 @@ const PRIORITY_SHORT: Record<string, string> = {
 
 const Analytics = () => {
   const { organization } = useOrganization();
-  const { theme } = useTheme();
-  const isDark = theme === "dark";
-  const colors = categoricalColors(isDark);
+  // Dark-only app: always the dark variant of the validated palette.
+  const colors = categoricalColors(true);
   const orgId = organization?.id;
 
   const { data: tickets, isLoading } = useQuery({

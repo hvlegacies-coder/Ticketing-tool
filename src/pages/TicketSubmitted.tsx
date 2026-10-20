@@ -10,7 +10,7 @@ const TicketSubmitted = () => {
   const clientAccessToken = location.state?.clientAccessToken as string | undefined;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen grid-bg">
       <PortalHeader homeHref={`/support/${orgSlug}`} orgSlug={orgSlug} />
       <div className="container flex items-center justify-center py-20">
         <motion.div

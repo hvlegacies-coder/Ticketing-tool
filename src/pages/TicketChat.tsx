@@ -32,7 +32,7 @@ const TicketChat = () => {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="flex min-h-screen items-center justify-center grid-bg">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -41,7 +41,7 @@ const TicketChat = () => {
   if (!ticket) return <NotFound />;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen grid-bg">
       <PortalHeader orgName={ticket.organization_name} homeHref={`/t/${token}`} orgSlug={ticket.organization_slug ?? undefined} />
       <div className="container max-w-2xl py-8">
         <Button variant="ghost" size="sm" asChild className="mb-6">
