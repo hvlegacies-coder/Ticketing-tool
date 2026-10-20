@@ -573,8 +573,11 @@ export type Database = {
           created_at: string
           description: string
           id: string
+          merged_into: string | null
           is_hidden: boolean
           organization_id: string
+          responded_at: string | null
+          staff_response: string | null
           status: string
           title: string
           vote_count: number
@@ -586,8 +589,11 @@ export type Database = {
           created_at?: string
           description: string
           id?: string
+          merged_into?: string | null
           is_hidden?: boolean
           organization_id: string
+          responded_at: string | null
+          staff_response: string | null
           status?: string
           title: string
           vote_count?: number
@@ -599,8 +605,11 @@ export type Database = {
           created_at?: string
           description?: string
           id?: string
+          merged_into?: string | null
           is_hidden?: boolean
           organization_id?: string
+          responded_at?: string | null
+          staff_response?: string | null
           status?: string
           title?: string
           vote_count?: number
@@ -767,6 +776,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      find_similar_suggestions: {
+        Args: { _slug: string; _query: string }
+        Returns: { id: string; title: string; status: string; vote_count: number }[]
+      }
+      merge_suggestion: {
+        Args: { _from: string; _into: string }
+        Returns: number
+      }
       create_suggestion: {
         Args: {
           _slug: string
@@ -789,6 +806,8 @@ export type Database = {
           vote_count: number
           author_name: string
           created_at: string
+          staff_response: string | null
+          responded_at: string | null
         }[]
       }
       vote_suggestion: {
