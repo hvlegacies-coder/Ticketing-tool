@@ -142,6 +142,7 @@ export type Database = {
           monday_group_id: string | null
           ai_chat_enabled: boolean
           ai_system_prompt_override: string | null
+          ghl_webhook_url: string | null
           updated_at: string
         }
         Insert: {
@@ -151,6 +152,7 @@ export type Database = {
           monday_group_id?: string | null
           ai_chat_enabled?: boolean
           ai_system_prompt_override?: string | null
+          ghl_webhook_url?: string | null
           updated_at?: string
         }
         Update: {
@@ -160,6 +162,7 @@ export type Database = {
           monday_group_id?: string | null
           ai_chat_enabled?: boolean
           ai_system_prompt_override?: string | null
+          ghl_webhook_url?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -562,8 +565,73 @@ export type Database = {
         }
         Relationships: []
       }
+      suggestions: {
+        Row: {
+          author_email: string
+          author_name: string
+          category: string
+          created_at: string
+          description: string
+          id: string
+          is_hidden: boolean
+          organization_id: string
+          status: string
+          title: string
+          vote_count: number
+        }
+        Insert: {
+          author_email: string
+          author_name: string
+          category: string
+          created_at?: string
+          description: string
+          id?: string
+          is_hidden?: boolean
+          organization_id: string
+          status?: string
+          title: string
+          vote_count?: number
+        }
+        Update: {
+          author_email?: string
+          author_name?: string
+          category?: string
+          created_at?: string
+          description?: string
+          id?: string
+          is_hidden?: boolean
+          organization_id?: string
+          status?: string
+          title?: string
+          vote_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "suggestions_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      suggestion_votes: {
+        Row: { created_at: string; suggestion_id: string; voter_email: string }
+        Insert: { created_at?: string; suggestion_id: string; voter_email: string }
+        Update: { created_at?: string; suggestion_id?: string; voter_email?: string }
+        Relationships: [
+          {
+            foreignKeyName: "suggestion_votes_suggestion_id_fkey"
+            columns: ["suggestion_id"]
+            isOneToOne: false
+            referencedRelation: "suggestions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tickets: {
         Row: {
+          agent_requested_at: string | null
           affected_system: string | null
           assigned_to: string | null
           assigned_to_user_id: string | null
@@ -599,6 +667,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          agent_requested_at?: string | null
           affected_system?: string | null
           assigned_to?: string | null
           assigned_to_user_id?: string | null
@@ -634,6 +703,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          agent_requested_at?: string | null
           affected_system?: string | null
           assigned_to?: string | null
           assigned_to_user_id?: string | null
@@ -697,6 +767,34 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_suggestion: {
+        Args: {
+          _slug: string
+          _name: string
+          _email: string
+          _title: string
+          _description: string
+          _category: string
+        }
+        Returns: string
+      }
+      get_public_suggestions: {
+        Args: { _slug: string; _sort?: string }
+        Returns: {
+          id: string
+          title: string
+          description: string
+          category: string
+          status: string
+          vote_count: number
+          author_name: string
+          created_at: string
+        }[]
+      }
+      vote_suggestion: {
+        Args: { _id: string; _email: string }
+        Returns: number
+      }
       accept_invitation: {
         Args: { _token: string }
         Returns: string
@@ -731,6 +829,7 @@ export type Database = {
           monday_group_id: string | null
           ai_chat_enabled: boolean
           ai_system_prompt_override: string | null
+          ghl_webhook_url: string | null
         }[]
       }
       get_org_public_profile: {
@@ -819,6 +918,7 @@ export type Database = {
           _monday_group_id: string
           _ai_chat_enabled: boolean
           _ai_system_prompt_override: string
+          _ghl_webhook_url?: string | null
         }
         Returns: undefined
       }
