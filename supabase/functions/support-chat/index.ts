@@ -1,7 +1,15 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Anthropic from "npm:@anthropic-ai/sdk";
-import { HANDOFF_TOOL_NAME, parseChatResult, rateLimitKey, toApiMessages, validateChatRequest } from "../_shared/chatLogic.ts";
+import {
+  HANDOFF_TOOL_NAME,
+  TICKET_TOOL_NAME,
+  parseChatResult,
+  rateLimitKey,
+  toApiMessages,
+  validateChatRequest,
+} from "../_shared/chatLogic.ts";
+import { TICKET_CATEGORIES, TICKET_PRIORITIES } from "../_shared/ticketOptions.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -153,6 +161,27 @@ Customers may send photos (screenshots, error messages, tax forms like W-2s or 1
 - If the photo is blurry or cropped, ask for a clearer one.
 - Your description becomes the record for our team if the customer later asks for an agent, so make it specific but free of sensitive numbers.`;
 
+const TICKET_INSTRUCTION = `
+
+This chat replaces the ticket form. When the issue needs follow-up from our team (an account problem, a refund or filing question you can't answer, a bug, a document problem), or the customer asks to open a ticket, call ${TICKET_TOOL_NAME} with a clear title, the best-fitting category, a priority, and a summary of everything learned so far (including your description of any photos, without sensitive numbers). Don't ask for their name or email — the form after your call collects them. Prefer ${TICKET_TOOL_NAME} for issues that can wait; use ${HANDOFF_TOOL_NAME} only when they want to talk to a person now.`;
+
+const createTicketTool = {
+  name: TICKET_TOOL_NAME,
+  description: "Prepare a support ticket for the customer to confirm and submit.",
+  strict: true,
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      title: { type: "string", description: "Short summary, under 100 characters." },
+      category: { type: "string", enum: [...TICKET_CATEGORIES] },
+      priority: { type: "string", enum: [...TICKET_PRIORITIES] },
+      summary: { type: "string", description: "Everything the team needs to act, in plain sentences." },
+    },
+    required: ["title", "category", "priority", "summary"],
+    additionalProperties: false,
+  },
+};
+
 const requestHumanAgentTool = {
   name: HANDOFF_TOOL_NAME,
   description:
@@ -221,8 +250,9 @@ serve(async (req) => {
 
   if (integration?.ai_chat_enabled === false) {
     return json({
-      reply: "Our AI assistant is currently unavailable — please use the ticket form above to reach our team.",
+      reply: "Our AI assistant is turned off right now — send us a message below and our team will reply by email.",
       handoff: false,
+      aiDisabled: true,
     });
   }
   if (integration?.ai_system_prompt_override) {
@@ -239,8 +269,8 @@ serve(async (req) => {
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
       output_config: { effort: "low" },
-      system: systemPrompt + HANDOFF_INSTRUCTION,
-      tools: [requestHumanAgentTool],
+      system: systemPrompt + HANDOFF_INSTRUCTION + TICKET_INSTRUCTION,
+      tools: [requestHumanAgentTool, createTicketTool],
       tool_choice: { type: "auto" },
       messages,
     });

@@ -12,8 +12,8 @@ const faqs = [
     a: "Our team reviews all tickets within 2 business hours. For urgent issues, we prioritize them immediately and aim to respond within 30 minutes.",
   },
   {
-    q: "What information should I include in my ticket?",
-    a: "Please include a clear description of the issue, any relevant URLs or page links, screenshots if applicable, and steps to reproduce the problem. The more detail you provide, the faster we can help.",
+    q: "How do I open a ticket?",
+    a: "Just describe your issue to the AI assistant, or tap \"Open a ticket\". It prepares the ticket for you — add your name and email, then submit. You'll get a confirmation email with a private link to follow up.",
   },
   {
     q: "Can I track the status of my ticket?",
@@ -21,15 +21,15 @@ const faqs = [
   },
   {
     q: "What types of issues can I report?",
-    a: "You can report incidents, service requests, password/account issues, network problems, hardware failures, software bugs, and more. Use the category dropdown to classify your issue.",
+    a: "You can report incidents, service requests, password/account issues, network problems, hardware failures, software bugs, and more. The AI assistant picks the right category for you.",
   },
   {
-    q: "How do I upload documents or screenshots?",
-    a: "In the ticket form, use the file upload area to drag and drop or browse for files. We support images (PNG, JPG), PDFs, Word documents, Excel files, and text files up to 10MB each.",
+    q: "Can I send a screenshot or a photo of a document?",
+    a: "Yes. Tap \"Send a photo\" or the camera icon in the chat. The AI reads it and helps right away. Photos aren't stored — only the AI's written description is kept with your ticket.",
   },
   {
-    q: "Can I use the AI assistant instead of the form?",
-    a: "Absolutely! Click the chat icon in the bottom corner to talk with our AI support assistant. It will help you describe your issue, gather all necessary details, and create a ticket draft you can review before submitting.",
+    q: "Can I talk to a real person?",
+    a: "Of course. Tap \"Talk to an agent\" in the chat, add your name and email, and you'll be connected to our team in a live chat.",
   },
 ];
 

@@ -18,27 +18,42 @@ function toWire(messages: ChatTurn[]) {
 }
 
 export type LiveSession = { ticketId: string; token: string; name: string; email: string };
+export type TicketDraft = { title: string; category: string; priority: string; summary: string };
+export type AiResult = {
+  reply: string;
+  handoff: boolean;
+  ticketDraft?: TicketDraft;
+  /** The org turned AI chat off: show the fallback message form. */
+  aiDisabled?: boolean;
+  /** The AI couldn't be reached: show the fallback message form. */
+  unavailable?: boolean;
+};
 
 export const AI_FALLBACK_TEXT =
-  'I\'m having trouble connecting right now. You can submit a ticket with the form, or tap "Talk to an agent".';
+  'I\'m having trouble connecting right now. Send us a message below, or tap "Talk to an agent".';
 
+// Must match "Moderate" in src/lib/mondayConfig.ts PRIORITY_OPTIONS (SLA policies key on it).
+const MODERATE_PRIORITY = "Moderate (single user or workaround available)";
 const TRANSCRIPT_MAX_CHARS = 10_000;
 // Matches MAX_MESSAGES in supabase/functions/_shared/chatLogic.ts; older turns are dropped.
 const MAX_SENT_TURNS = 30;
 const sessionKey = (orgId: string) => `hv-live-chat:${orgId}`;
 
-export async function sendAiMessage(
-  organizationId: string,
-  messages: ChatTurn[],
-): Promise<{ reply: string; handoff: boolean }> {
+export async function sendAiMessage(organizationId: string, messages: ChatTurn[]): Promise<AiResult> {
+  const fallback: AiResult = { reply: AI_FALLBACK_TEXT, handoff: false, unavailable: true };
   try {
     const { data, error } = await supabase.functions.invoke("support-chat", {
       body: { organizationId, messages: toWire(messages.slice(-MAX_SENT_TURNS)) },
     });
-    if (error || typeof data?.reply !== "string") return { reply: AI_FALLBACK_TEXT, handoff: false };
-    return { reply: data.reply, handoff: data.handoff === true };
+    if (error || typeof data?.reply !== "string") return fallback;
+    return {
+      reply: data.reply,
+      handoff: data.handoff === true,
+      ...(data.ticketDraft ? { ticketDraft: data.ticketDraft as TicketDraft } : {}),
+      ...(data.aiDisabled ? { aiDisabled: true } : {}),
+    };
   } catch {
-    return { reply: AI_FALLBACK_TEXT, handoff: false };
+    return fallback;
   }
 }
 
@@ -49,34 +64,106 @@ export function buildTranscript(messages: ChatTurn[]): string {
     .slice(0, TRANSCRIPT_MAX_CHARS);
 }
 
-// Same anonymous insert path as TicketForm: id and token are generated
+// Anonymous ticket insert: id and token are generated
 // client-side because anon can't read the row back (RLS on RETURNING).
+async function insertTicket(fields: Record<string, unknown>): Promise<{ ticketId: string; token: string }> {
+  const ticketId = crypto.randomUUID();
+  const token = generateClientAccessToken();
+  const { error } = await supabase.from("tickets").insert({ id: ticketId, client_access_token: token, ...fields } as never);
+  if (error) throw error;
+  return { ticketId, token };
+}
+
+// Confirmation email with the private chat link; never blocks ticket creation.
+async function sendConfirmationEmail(p: {
+  ticketId: string;
+  token: string;
+  email: string;
+  name: string;
+  title: string;
+  priority: string;
+  category: string;
+  company: string;
+  orgName?: string;
+}) {
+  try {
+    await supabase.functions.invoke("send-ticket-email", {
+      body: {
+        ticketId: p.ticketId,
+        email: p.email,
+        clientName: p.name,
+        issueTitle: p.title,
+        priority: p.priority,
+        issueCategory: p.category,
+        companyName: p.company,
+        chatLink: `${window.location.origin}/t/${p.token}`,
+        orgName: p.orgName,
+      },
+    });
+  } catch (err) {
+    console.error("Confirmation email failed (non-blocking):", err);
+  }
+}
+
+const transcriptJson = (turns: ChatTurn[]) => turns.map((m) => ({ role: m.role, content: textOnly(m) }));
+
 export async function createHandoffTicket(input: {
   organizationId: string;
   name: string;
   email: string;
   turns: ChatTurn[];
+  orgName?: string;
 }): Promise<{ ticketId: string; token: string }> {
-  const ticketId = crypto.randomUUID();
-  const token = generateClientAccessToken();
-
-  const { error } = await supabase.from("tickets").insert({
-    id: ticketId,
-    client_access_token: token,
+  const title = "Live chat request";
+  const ids = await insertTicket({
     organization_id: input.organizationId,
     client_full_name: input.name,
     email: input.email,
     company_name: "—",
-    issue_title: "Live chat request",
+    issue_title: title,
     issue_category: "Live Chat",
-    priority: "Medium",
+    priority: MODERATE_PRIORITY,
     issue_description: buildTranscript(input.turns) || "Customer requested a live agent.",
-    chatbot_transcript: input.turns.map((m) => ({ role: m.role, content: textOnly(m) })),
+    chatbot_transcript: transcriptJson(input.turns),
     agent_requested_at: new Date().toISOString(),
-  } as never);
-  if (error) throw error;
+  });
+  await sendConfirmationEmail({ ...ids, email: input.email, name: input.name, title, priority: MODERATE_PRIORITY, category: "Live Chat", company: "—", orgName: input.orgName });
+  return ids;
+}
 
-  return { ticketId, token };
+/** Ticket the AI prepared and the customer confirmed (no live agent requested). */
+export async function createTicketFromChat(input: {
+  organizationId: string;
+  orgName?: string;
+  name: string;
+  email: string;
+  company: string;
+  draft: TicketDraft;
+  turns: ChatTurn[];
+}): Promise<{ ticketId: string; token: string }> {
+  const company = input.company.trim() || "—";
+  const ids = await insertTicket({
+    organization_id: input.organizationId,
+    client_full_name: input.name,
+    email: input.email,
+    company_name: company,
+    issue_title: input.draft.title,
+    issue_category: input.draft.category,
+    priority: input.draft.priority,
+    issue_description: input.draft.summary,
+    chatbot_transcript: transcriptJson(input.turns),
+  });
+  await sendConfirmationEmail({
+    ...ids,
+    email: input.email,
+    name: input.name,
+    title: input.draft.title,
+    priority: input.draft.priority,
+    category: input.draft.category,
+    company,
+    orgName: input.orgName,
+  });
+  return ids;
 }
 
 export function saveLiveSession(orgId: string, session: LiveSession): void {

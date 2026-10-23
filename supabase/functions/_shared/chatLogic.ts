@@ -1,5 +1,6 @@
 // Pure request/response helpers for the support-chat edge function.
 // No Deno or SDK imports so Vitest can test them.
+import { DEFAULT_PRIORITY, TICKET_CATEGORIES, TICKET_PRIORITIES } from "./ticketOptions.ts";
 
 export const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
 export type ChatImage = { media_type: (typeof IMAGE_TYPES)[number]; data: string };
@@ -18,9 +19,13 @@ export const MAX_MESSAGE_CHARS = 2000;
 // ~5 MB of image bytes once base64-decoded.
 export const MAX_IMAGE_BASE64 = 7_000_000;
 export const HANDOFF_TOOL_NAME = "request_human_agent";
+export const TICKET_TOOL_NAME = "create_ticket";
+
+export type TicketDraft = { title: string; category: string; priority: string; summary: string };
 export const PHOTO_PLACEHOLDER = "[customer shared a photo]";
 
 const HANDOFF_DEFAULT_REPLY = "Sure — I'll connect you with a team member.";
+const TICKET_DEFAULT_REPLY = "Here's the ticket I prepared — add your name and email to submit it.";
 const REFUSAL_REPLY = "Sorry, I can't help with that here. Let me connect you with a team member.";
 
 export function validateChatRequest(
@@ -57,10 +62,22 @@ export function validateChatRequest(
   return { ok: true, organizationId: b.organizationId, messages: b.messages as ChatTurn[] };
 }
 
+/** Normalizes the create_ticket tool input; null when title or summary is missing. */
+export function validateTicketDraft(input: unknown): TicketDraft | null {
+  const d = (input ?? {}) as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+  const title = str(d.title).slice(0, 140);
+  const summary = str(d.summary).slice(0, 4000);
+  if (!title || !summary) return null;
+  const category = (TICKET_CATEGORIES as readonly string[]).includes(str(d.category)) ? str(d.category) : "Other";
+  const priority = (TICKET_PRIORITIES as readonly string[]).includes(str(d.priority)) ? str(d.priority) : DEFAULT_PRIORITY;
+  return { title, category, priority, summary };
+}
+
 export function parseChatResult(resp: {
   stop_reason: string;
-  content: Array<{ type: string; text?: string; name?: string }>;
-}): { reply: string; handoff: boolean } {
+  content: Array<{ type: string; text?: string; name?: string; input?: unknown }>;
+}): { reply: string; handoff: boolean; ticketDraft?: TicketDraft } {
   if (resp.stop_reason === "refusal") return { reply: REFUSAL_REPLY, handoff: true };
 
   const text = resp.content
@@ -70,6 +87,10 @@ export function parseChatResult(resp: {
     .trim();
   const handoff = resp.content.some((b) => b.type === "tool_use" && b.name === HANDOFF_TOOL_NAME);
 
+  const ticketCall = resp.content.find((b) => b.type === "tool_use" && b.name === TICKET_TOOL_NAME);
+  const ticketDraft = ticketCall ? validateTicketDraft(ticketCall.input) : null;
+
+  if (ticketDraft && !handoff) return { reply: text || TICKET_DEFAULT_REPLY, handoff: false, ticketDraft };
   return { reply: text || (handoff ? HANDOFF_DEFAULT_REPLY : ""), handoff };
 }
 

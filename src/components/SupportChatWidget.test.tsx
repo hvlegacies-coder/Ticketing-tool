@@ -8,6 +8,7 @@ const chat = vi.hoisted(() => ({
   loadLiveSession: vi.fn(),
   clearLiveSession: vi.fn(),
   shrinkImage: vi.fn(),
+  createTicketFromChat: vi.fn(),
 }));
 vi.mock("@/lib/supportChat", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/supportChat")>()),
@@ -141,5 +142,63 @@ describe("SupportChatWidget", () => {
     openWidget();
     expect(screen.getByRole("button", { name: /Send a photo/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Upload docs" })).not.toBeInTheDocument();
+  });
+
+  const draft = {
+    title: "Refund status not updating",
+    category: "Software/Application",
+    priority: "Moderate (single user or workaround available)",
+    summary: "Portal still shows Pending.",
+  };
+
+  it("renders inline and open when embedded", () => {
+    render(<SupportChatWidget organizationId="org-1" embedded />);
+    expect(screen.getByText(GREETING)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open support chat" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Close chat" })).not.toBeInTheDocument();
+  });
+
+  it("submits the AI-prepared ticket once and shows the chat link", async () => {
+    chat.sendAiMessage.mockResolvedValue({ reply: "I prepared a ticket.", handoff: false, ticketDraft: draft });
+    let resolve!: (v: { ticketId: string; token: string }) => void;
+    chat.createTicketFromChat.mockReturnValue(new Promise((r) => (resolve = r)));
+    render(<SupportChatWidget organizationId="org-1" orgName="HV" embedded />);
+    fireEvent.change(screen.getByPlaceholderText("Type a message…"), { target: { value: "refund stuck" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    expect(await screen.findByText("Refund status not updating")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Ann" } });
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "ann@x.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "Submit ticket" }));
+    fireEvent.click(screen.getByRole("button", { name: /Submit/ }));
+    await act(async () => resolve({ ticketId: "abcd1234", token: "tok" }));
+    expect(chat.createTicketFromChat).toHaveBeenCalledTimes(1);
+    expect(chat.createTicketFromChat).toHaveBeenCalledWith(
+      expect.objectContaining({ organizationId: "org-1", orgName: "HV", name: "Ann", email: "ann@x.com", draft }),
+    );
+    expect(await screen.findByText(/Ticket #ABCD created/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /\/t\/tok/ })).toHaveAttribute("href", "/t/tok");
+  });
+
+  it("shows the backup message form when the AI is unavailable", async () => {
+    chat.sendAiMessage.mockResolvedValue({ reply: "trouble", handoff: false, unavailable: true });
+    chat.createTicketFromChat.mockResolvedValue({ ticketId: "abcd1234", token: "tok" });
+    render(<SupportChatWidget organizationId="org-1" embedded />);
+    fireEvent.change(screen.getByPlaceholderText("Type a message…"), { target: { value: "hello" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    expect(await screen.findByText("Send us a message")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Ann" } });
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "ann@x.com" } });
+    fireEvent.change(screen.getByLabelText("Message"), { target: { value: "My refund is stuck since March." } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message to team" }));
+    await waitFor(() =>
+      expect(chat.createTicketFromChat).toHaveBeenCalledWith(
+        expect.objectContaining({ draft: expect.objectContaining({ category: "Other", summary: "My refund is stuck since March." }) }),
+      ),
+    );
+  });
+
+  it("offers an Open a ticket quick action", () => {
+    render(<SupportChatWidget organizationId="org-1" embedded />);
+    expect(screen.getByRole("button", { name: /Open a ticket/ })).toBeInTheDocument();
   });
 });

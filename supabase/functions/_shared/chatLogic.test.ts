@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { MAX_IMAGE_BASE64, parseChatResult, rateLimitKey, toApiMessages, validateChatRequest } from "./chatLogic";
+import {
+  MAX_IMAGE_BASE64,
+  parseChatResult,
+  rateLimitKey,
+  toApiMessages,
+  validateChatRequest,
+  validateTicketDraft,
+} from "./chatLogic";
 
 describe("validateChatRequest", () => {
   it("rejects more than 30 messages", () => {
@@ -161,5 +168,48 @@ describe("images", () => {
         { type: "text", text: "Please look at this photo." },
       ],
     });
+  });
+});
+
+describe("create_ticket tool", () => {
+  const input = {
+    title: "Refund status not updating",
+    category: "Software/Application",
+    priority: "Moderate (single user or workaround available)",
+    summary: "Customer filed in March; portal still shows Pending.",
+  };
+
+  it("returns a ticket draft when Claude calls create_ticket", () => {
+    expect(
+      parseChatResult({
+        stop_reason: "tool_use",
+        content: [{ type: "text", text: "I can open a ticket." }, { type: "tool_use", name: "create_ticket", input }],
+      }),
+    ).toEqual({ reply: "I can open a ticket.", handoff: false, ticketDraft: input });
+  });
+
+  it("uses a default prompt when the tool call has no text", () => {
+    expect(
+      parseChatResult({ stop_reason: "tool_use", content: [{ type: "tool_use", name: "create_ticket", input }] }).reply,
+    ).toBe("Here's the ticket I prepared — add your name and email to submit it.");
+  });
+
+  it("falls back to Other and Moderate for values outside the lists", () => {
+    expect(validateTicketDraft({ ...input, category: "Taxes", priority: "ASAP" })).toEqual({
+      ...input,
+      category: "Other",
+      priority: "Moderate (single user or workaround available)",
+    });
+  });
+
+  it("rejects a draft without a title or summary", () => {
+    expect(validateTicketDraft({ ...input, title: " " })).toBeNull();
+    expect(validateTicketDraft({ ...input, summary: undefined })).toBeNull();
+  });
+
+  it("trims and caps long fields", () => {
+    const d = validateTicketDraft({ ...input, title: "x".repeat(300), summary: "y".repeat(5000) })!;
+    expect(d.title).toHaveLength(140);
+    expect(d.summary).toHaveLength(4000);
   });
 });
