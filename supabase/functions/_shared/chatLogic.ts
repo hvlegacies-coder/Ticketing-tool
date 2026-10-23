@@ -129,3 +129,9 @@ export function rateLimitKey(headers: Headers): string {
   const ip = headers.get("x-forwarded-for")?.split(",")[0]?.trim();
   return `ip:${ip || "unknown"}`;
 }
+
+/** Tolerates a secret pasted with quotes, whitespace, or inside a copied curl example. */
+export function extractApiKey(raw: string | undefined): string {
+  if (!raw) return "";
+  return raw.match(/sk-ant-[A-Za-z0-9_-]+/)?.[0] ?? raw.trim().replace(/^["']|["']$/g, "");
+}

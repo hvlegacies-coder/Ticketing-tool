@@ -4,6 +4,7 @@ import Anthropic from "npm:@anthropic-ai/sdk";
 import {
   HANDOFF_TOOL_NAME,
   TICKET_TOOL_NAME,
+  extractApiKey,
   parseChatResult,
   rateLimitKey,
   toApiMessages,
@@ -205,7 +206,7 @@ const json = (body: unknown, status = 200) =>
 const RATE_LIMIT = 60;
 const RATE_WINDOW = "1 hour";
 
-const anthropic = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY") });
+const anthropic = new Anthropic({ apiKey: extractApiKey(Deno.env.get("ANTHROPIC_API_KEY")) });
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {

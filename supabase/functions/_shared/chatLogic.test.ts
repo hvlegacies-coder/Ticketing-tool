@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   MAX_IMAGE_BASE64,
+  extractApiKey,
   parseChatResult,
   rateLimitKey,
   toApiMessages,
@@ -211,5 +212,20 @@ describe("create_ticket tool", () => {
     const d = validateTicketDraft({ ...input, title: "x".repeat(300), summary: "y".repeat(5000) })!;
     expect(d.title).toHaveLength(140);
     expect(d.summary).toHaveLength(4000);
+  });
+});
+
+describe("extractApiKey", () => {
+  it("pulls the key out of a pasted curl example", () => {
+    const pasted = 'curl https://api.anthropic.com/v1/messages \\n  --header "x-api-key: sk-ant-api03-AbC_d-123" \\n  --header "anthropic-version: 2023-06-01"';
+    expect(extractApiKey(pasted)).toBe("sk-ant-api03-AbC_d-123");
+  });
+
+  it("trims whitespace and quotes around a plain key", () => {
+    expect(extractApiKey('  "sk-ant-api03-xyz"\n')).toBe("sk-ant-api03-xyz");
+  });
+
+  it("returns an empty string when unset", () => {
+    expect(extractApiKey(undefined)).toBe("");
   });
 });
