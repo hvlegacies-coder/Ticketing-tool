@@ -63,7 +63,7 @@ BEGIN
   INSERT INTO public.tickets (id, organization_id, client_full_name, company_name, email, issue_title,
                               issue_category, issue_description, client_access_token, agent_requested_at)
   VALUES (_t, '00000000-0000-0000-0000-00000000000a', 'Cat', '—', 'cat@x.com', 'Live chat request',
-          'Live Chat', 'transcript', encode(gen_random_bytes(20), 'hex'), now());
+          'Live Chat', 'transcript', encode(extensions.gen_random_bytes(20), 'hex'), now());
   INSERT INTO public.chat_messages (ticket_id, sender_type, sender_name, message)
   VALUES (_t, 'support', 'Agent', 'Hi!');
   SELECT agent_requested_at INTO _v FROM public.tickets WHERE id = _t;

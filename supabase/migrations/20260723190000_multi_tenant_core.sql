@@ -2,6 +2,9 @@
 -- Multi-tenant core: organizations, membership, invitations, RBAC helpers
 -- ============================================================================
 
+-- gen_random_bytes lives in pgcrypto, installed in the extensions schema on Supabase.
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
+
 CREATE TABLE public.organizations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
@@ -63,7 +66,7 @@ CREATE TABLE public.organization_invitations (
   organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
   email TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'agent' CHECK (role IN ('admin', 'agent', 'viewer')),
-  token TEXT NOT NULL UNIQUE DEFAULT encode(gen_random_bytes(24), 'hex'),
+  token TEXT NOT NULL UNIQUE DEFAULT encode(extensions.gen_random_bytes(24), 'hex'),
   invited_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   accepted_at TIMESTAMPTZ,
   expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + interval '14 days'),

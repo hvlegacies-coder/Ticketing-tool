@@ -7,7 +7,7 @@
 ALTER TABLE public.tickets
   ADD COLUMN organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE,
   ADD COLUMN assigned_to_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-  ADD COLUMN client_access_token TEXT NOT NULL UNIQUE DEFAULT encode(gen_random_bytes(20), 'hex'),
+  ADD COLUMN client_access_token TEXT NOT NULL UNIQUE DEFAULT encode(extensions.gen_random_bytes(20), 'hex'),
   ADD COLUMN first_response_due_at TIMESTAMPTZ,
   ADD COLUMN resolution_due_at TIMESTAMPTZ,
   ADD COLUMN first_responded_at TIMESTAMPTZ,
