@@ -39,7 +39,7 @@ const SupportPortal = () => {
 
       <section id="chat" className="pb-16 pt-8 lg:pb-20">
         <div className="container max-w-3xl">
-          <SupportChatWidget organizationId={org.id} orgName={org.name} embedded />
+          <SupportChatWidget organizationId={org.id} orgName={org.name} orgSlug={orgSlug} embedded />
         </div>
       </section>
 

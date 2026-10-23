@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Camera, FilePlus2, MessageCircle, Send, UserRound, X } from "lucide-react";
+import { Camera, FilePlus2, MessageCircle, Search, Send, UserRound, X } from "lucide-react";
+import { format, formatDistanceToNow } from "date-fns";
 import ReactMarkdown from "react-markdown";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,8 @@ import { HandoffForm } from "@/components/chat/HandoffForm";
 import { MessageForm } from "@/components/chat/MessageForm";
 import { ThinkingWave } from "@/components/chat/ThinkingWave";
 import { TicketDraftCard } from "@/components/chat/TicketDraftCard";
+import { TrackTicketCard } from "@/components/chat/TrackTicketCard";
+import { formatTicketRef, trackTicket } from "@/lib/tracking";
 import {
   type ChatImage,
   type ChatTurn,
@@ -29,17 +32,18 @@ const GREETING: ChatTurn = {
   role: "assistant",
   content: "Hi! Describe your issue and I'll help — or connect you to a person.",
 };
-const QUICK_ACTIONS = ["Track refund"];
 const OPEN_TICKET_PROMPT = "I'd like to open a support ticket.";
 
 interface SupportChatWidgetProps {
   organizationId: string;
   orgName?: string;
+  /** Org slug for the public ticket-status lookup. */
+  orgSlug?: string;
   /** Render as an inline panel (portal page) instead of a floating bubble. */
   embedded?: boolean;
 }
 
-export function SupportChatWidget({ organizationId, orgName, embedded = false }: SupportChatWidgetProps) {
+export function SupportChatWidget({ organizationId, orgName, orgSlug, embedded = false }: SupportChatWidgetProps) {
   const [live, setLive] = useState<LiveSession | null>(() => loadLiveSession(organizationId));
   const [open, setOpen] = useState(() => embedded || live !== null);
   const [messages, setMessages] = useState<ChatTurn[]>([GREETING]);
@@ -48,6 +52,8 @@ export function SupportChatWidget({ organizationId, orgName, embedded = false }:
   const [showHandoff, setShowHandoff] = useState(false);
   const [ticketDraft, setTicketDraft] = useState<TicketDraft | null>(null);
   const [showMessageForm, setShowMessageForm] = useState(false);
+  const [showTracker, setShowTracker] = useState(false);
+  const [checking, setChecking] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [agentName, setAgentName] = useState<string | null>(null);
   const submittingRef = useRef(false);
@@ -59,7 +65,7 @@ export function SupportChatWidget({ organizationId, orgName, embedded = false }:
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages, showHandoff, ticketDraft, showMessageForm, isLoading]);
+  }, [messages, showHandoff, ticketDraft, showMessageForm, showTracker, isLoading]);
 
   useEffect(() => {
     if (!open || embedded) return;
@@ -123,7 +129,7 @@ export function SupportChatWidget({ organizationId, orgName, embedded = false }:
       ...prev,
       {
         role: "assistant",
-        content: `✅ Ticket #${ticketId.slice(0, 4).toUpperCase()} created. We emailed you a private chat link — you can also open it here: [${url}](/t/${token})`,
+        content: `✅ Ticket #${formatTicketRef(ticketId)} created. We emailed you a private chat link — you can also open it here: [${url}](/t/${token})`,
       },
     ]);
   };
@@ -173,6 +179,28 @@ export function SupportChatWidget({ organizationId, orgName, embedded = false }:
       confirmCreated(ticketId, token);
     }, "Couldn't send your message. Please try again.");
 
+  const lookUpTicket = async (input: string) => {
+    if (!orgSlug) return;
+    setChecking(true);
+    let reply: string;
+    try {
+      const t = await trackTicket(orgSlug, input);
+      reply = t
+        ? `Ticket #${t.ticket_ref} · **${t.status}** · opened ${format(new Date(t.created_at), "MMM d")} · last update ${formatDistanceToNow(new Date(t.updated_at), { addSuffix: true })} · ${
+            t.team_replied
+              ? "our team has replied — check your email for your private chat link."
+              : "our team will reply soon. Your private chat link is in your confirmation email."
+          }`
+        : "We couldn't find that ticket number. Check your confirmation email — it's the 8 characters after the #.";
+      setShowTracker(false);
+    } catch {
+      reply = "Couldn't check right now — please try again in a moment.";
+    } finally {
+      setChecking(false);
+    }
+    setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
+  };
+
   const endLiveChat = () => {
     clearLiveSession(organizationId);
     setLive(null);
@@ -193,7 +221,7 @@ export function SupportChatWidget({ organizationId, orgName, embedded = false }:
             HIGHERVIEW <span className="text-gold">AI</span>
           </p>
           <p className="text-[10px] tracking-[0.12em] text-cyan">
-            {live ? `● LIVE · TICKET #${live.ticketId.slice(0, 4).toUpperCase()}` : "● ONLINE · ASK ANYTHING OR OPEN A TICKET"}
+            {live ? `● LIVE · TICKET #${formatTicketRef(live.ticketId)}` : "● ONLINE · ASK ANYTHING OR OPEN A TICKET"}
           </p>
         </div>
         {!embedded && (
@@ -256,6 +284,7 @@ export function SupportChatWidget({ organizationId, orgName, embedded = false }:
             )}
             {ticketDraft && <TicketDraftCard draft={ticketDraft} submitting={submitting} onSubmit={submitDraft} />}
             {showMessageForm && <MessageForm submitting={submitting} onSubmit={submitMessage} />}
+            {showTracker && <TrackTicketCard checking={checking} onLookup={lookUpTicket} />}
             {showHandoff && <HandoffForm onSubmit={startLiveChat} submitting={submitting} />}
           </div>
 
@@ -269,11 +298,11 @@ export function SupportChatWidget({ organizationId, orgName, embedded = false }:
             <button onClick={() => fileRef.current?.click()} className={`${chip} border-cyan/40 text-cyan hover:bg-cyan/10`}>
               <Camera className="h-3 w-3" /> Send a photo
             </button>
-            {QUICK_ACTIONS.map((label) => (
-              <button key={label} onClick={() => send(label)} className={`${chip} border-cyan/40 text-cyan hover:bg-cyan/10`}>
-                {label}
+            {orgSlug && (
+              <button onClick={() => setShowTracker(true)} className={`${chip} border-cyan/40 text-cyan hover:bg-cyan/10`}>
+                <Search className="h-3 w-3" /> Track ticket
               </button>
-            ))}
+            )}
           </div>
 
           {(pendingPhoto || photoError) && (

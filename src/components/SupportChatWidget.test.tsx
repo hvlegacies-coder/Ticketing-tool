@@ -15,6 +15,12 @@ vi.mock("@/lib/supportChat", async (importOriginal) => ({
   ...chat,
 }));
 
+const track = vi.hoisted(() => ({ trackTicket: vi.fn() }));
+vi.mock("@/lib/tracking", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/tracking")>()),
+  ...track,
+}));
+
 // Capture the live thread's props so tests can simulate an agent joining.
 const live = vi.hoisted(() => ({ props: null as null | { token: string; onSupportJoined?: (n: string) => void } }));
 vi.mock("@/components/ClientTicketMessages", () => ({
@@ -30,6 +36,7 @@ const GREETING = "Hi! Describe your issue and I'll help — or connect you to a 
 
 beforeEach(() => {
   Object.values(chat).forEach((fn) => fn.mockReset());
+  track.trackTicket.mockReset();
   chat.loadLiveSession.mockReturnValue(null);
   live.props = null;
 });
@@ -175,7 +182,7 @@ describe("SupportChatWidget", () => {
     expect(chat.createTicketFromChat).toHaveBeenCalledWith(
       expect.objectContaining({ organizationId: "org-1", orgName: "HV", name: "Ann", email: "ann@x.com", draft }),
     );
-    expect(await screen.findByText(/Ticket #ABCD created/)).toBeInTheDocument();
+    expect(await screen.findByText(/Ticket #ABCD1234 created/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /\/t\/tok/ })).toHaveAttribute("href", "/t/tok");
   });
 
@@ -200,5 +207,59 @@ describe("SupportChatWidget", () => {
   it("offers an Open a ticket quick action", () => {
     render(<SupportChatWidget organizationId="org-1" embedded />);
     expect(screen.getByRole("button", { name: /Open a ticket/ })).toBeInTheDocument();
+  });
+
+  it("tracks a ticket by number and shows its status", async () => {
+    track.trackTicket.mockResolvedValue({
+      ticket_ref: "1A2B3C4D",
+      status: "In Progress",
+      created_at: "2026-10-20T10:00:00Z",
+      updated_at: new Date().toISOString(),
+      team_replied: true,
+    });
+    render(<SupportChatWidget organizationId="org-1" orgSlug="hv" embedded />);
+    fireEvent.click(screen.getByRole("button", { name: /Track ticket/ }));
+    fireEvent.change(screen.getByLabelText("Ticket number"), { target: { value: "#1a2b3c4d" } });
+    fireEvent.click(screen.getByRole("button", { name: "Check status" }));
+    expect(await screen.findByText(/Ticket #1A2B3C4D/)).toBeInTheDocument();
+    expect(screen.getByText(/In Progress/)).toBeInTheDocument();
+    expect(screen.getByText(/our team has replied/)).toBeInTheDocument();
+    expect(track.trackTicket).toHaveBeenCalledWith("hv", "#1a2b3c4d");
+  });
+
+  it("says when a ticket number isn't found", async () => {
+    track.trackTicket.mockResolvedValue(null);
+    render(<SupportChatWidget organizationId="org-1" orgSlug="hv" embedded />);
+    fireEvent.click(screen.getByRole("button", { name: /Track ticket/ }));
+    fireEvent.change(screen.getByLabelText("Ticket number"), { target: { value: "FFFFFFFF" } });
+    fireEvent.click(screen.getByRole("button", { name: "Check status" }));
+    expect(await screen.findByText(/couldn't find that ticket number/)).toBeInTheDocument();
+  });
+
+  it("asks for 8 characters before looking anything up", () => {
+    render(<SupportChatWidget organizationId="org-1" orgSlug="hv" embedded />);
+    fireEvent.click(screen.getByRole("button", { name: /Track ticket/ }));
+    fireEvent.change(screen.getByLabelText("Ticket number"), { target: { value: "12" } });
+    fireEvent.click(screen.getByRole("button", { name: "Check status" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("8 characters");
+    expect(track.trackTicket).not.toHaveBeenCalled();
+  });
+
+  it("shows 8-character ticket numbers after creating a ticket", async () => {
+    chat.sendAiMessage.mockResolvedValue({ reply: "Prepared", handoff: false, ticketDraft: draft });
+    chat.createTicketFromChat.mockResolvedValue({ ticketId: "abcd1234-0000-4000-8000-000000000000", token: "tok" });
+    render(<SupportChatWidget organizationId="org-1" embedded />);
+    fireEvent.change(screen.getByPlaceholderText("Type a message…"), { target: { value: "help" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await screen.findByText("Refund status not updating");
+    fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Ann" } });
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "ann@x.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "Submit ticket" }));
+    expect(await screen.findByText(/Ticket #ABCD1234 created/)).toBeInTheDocument();
+  });
+
+  it("no longer offers Track refund", () => {
+    render(<SupportChatWidget organizationId="org-1" embedded />);
+    expect(screen.queryByRole("button", { name: "Track refund" })).not.toBeInTheDocument();
   });
 });

@@ -776,6 +776,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      track_ticket: {
+        Args: { _slug: string; _ticket_ref: string }
+        Returns: { ticket_ref: string; status: string; created_at: string; updated_at: string; team_replied: boolean }[]
+      }
       find_similar_suggestions: {
         Args: { _slug: string; _query: string }
         Returns: { id: string; title: string; status: string; vote_count: number }[]
