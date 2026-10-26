@@ -13,7 +13,7 @@ import {
   validateChatRequest,
 } from "../_shared/chatLogic.ts";
 import { TICKET_CATEGORIES, TICKET_PRIORITIES } from "../_shared/ticketOptions.ts";
-import { knowledgeBlock } from "../_shared/knowledge/taxPracticeKb.ts";
+import { knowledgeBlock } from "../_shared/knowledge/knowledgeBase.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
