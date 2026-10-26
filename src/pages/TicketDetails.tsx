@@ -32,6 +32,7 @@ import { useOrganization } from "@/hooks/useOrganization";
 import { toast } from "sonner";
 import type { Tables } from "@/integrations/supabase/types";
 import { getSlaState, formatDueLabel, SLA_STATE_STYLES, SLA_STATE_LABELS } from "@/lib/sla";
+import { changeTicketStatus } from "@/lib/ticketActions";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -113,90 +114,30 @@ const TicketDetails = () => {
     }
   };
 
-  const handleCloseTicket = async () => {
+  // Same status flow as the dashboard table (Monday sync + customer email).
+  const runStatus = async (status: "Processing" | "Closed", setBusy: (b: boolean) => void) => {
     if (!ticket) return;
-    setIsClosing(true);
+    setBusy(true);
     try {
-      const { error: updateError } = await supabase.from("tickets").update({ status: "Closed" } as never).eq("id", ticket.id);
-      if (updateError) throw updateError;
-
-      try {
-        await supabase.functions.invoke("update-monday-group", { body: { ticketId: ticket.id, status: "Closed" } });
-      } catch (mondayErr) {
-        console.error("Monday group move error (non-blocking):", mondayErr);
-      }
-
-      try {
-        await supabase.functions.invoke("send-ticket-resolved-email", {
-          body: {
-            ticketId: ticket.id,
-            email: ticket.email,
-            clientName: ticket.client_full_name,
-            issueTitle: ticket.issue_title,
-            priority: ticket.priority,
-            issueCategory: ticket.issue_category,
-            department: ticket.department,
-            resolvedBy: user?.user_metadata?.full_name || user?.email || "Support Team",
-            chatLink: `${window.location.origin}/t/${ticket.client_access_token}`,
-            orgName: organization?.name,
-            portalUrl: organization ? `${window.location.origin}/support/${organization.slug}` : undefined,
-          },
-        });
-      } catch (emailErr) {
-        console.error("Resolution email error (non-blocking):", emailErr);
-      }
-
-      toast.success("Ticket closed and resolution email sent to client.");
+      const { emailSent } = await changeTicketStatus(ticket, status, {
+        orgName: organization?.name,
+        orgSlug: organization?.slug,
+        actorName: (user?.user_metadata?.full_name as string | undefined) || user?.email || "Support Team",
+      });
+      const done = status === "Closed" ? "Ticket closed" : "Ticket marked as Processing";
+      if (emailSent === false) toast.warning(`${done}, but the customer email couldn't be sent.`);
+      else toast.success(`${done} and the customer was emailed.`);
       invalidateTicket();
     } catch (err) {
-      console.error("Close ticket error:", err);
-      toast.error("Failed to close ticket. Please try again.");
-    } finally {
-      setIsClosing(false);
-    }
-  };
-
-  const handleProcessingTicket = async () => {
-    if (!ticket) return;
-    setIsProcessing(true);
-    try {
-      const { error: updateError } = await supabase.from("tickets").update({ status: "Processing" } as never).eq("id", ticket.id);
-      if (updateError) throw updateError;
-
-      try {
-        await supabase.functions.invoke("update-monday-group", { body: { ticketId: ticket.id, status: "Processing" } });
-      } catch (mondayErr) {
-        console.error("Monday group move error (non-blocking):", mondayErr);
-      }
-
-      try {
-        await supabase.functions.invoke("send-ticket-processing-email", {
-          body: {
-            ticketId: ticket.id,
-            email: ticket.email,
-            clientName: ticket.client_full_name,
-            issueTitle: ticket.issue_title,
-            priority: ticket.priority,
-            issueCategory: ticket.issue_category,
-            department: ticket.department,
-            chatLink: `${window.location.origin}/t/${ticket.client_access_token}`,
-            orgName: organization?.name,
-            portalUrl: organization ? `${window.location.origin}/support/${organization.slug}` : undefined,
-          },
-        });
-      } catch (emailErr) {
-        console.error("Processing email error (non-blocking):", emailErr);
-      }
-
-      toast.success("Ticket marked as Processing and notification sent to client.");
-      invalidateTicket();
-    } catch (err) {
-      console.error("Processing ticket error:", err);
+      console.error("Status change error:", err);
       toast.error("Failed to update ticket. Please try again.");
     } finally {
-      setIsProcessing(false);
+      setBusy(false);
     }
   };
+
+  const handleCloseTicket = () => runStatus("Closed", setIsClosing);
+  const handleProcessingTicket = () => runStatus("Processing", setIsProcessing);
 
   const handleCopyLink = () => {
     if (!ticket) return;

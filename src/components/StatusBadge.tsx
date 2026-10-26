@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { priorityLabel } from "@/lib/ticketActions";
 
 interface StatusBadgeProps {
   value: string;
@@ -20,6 +21,8 @@ const statusStyles: Record<string, string> = {
   "Medium": "bg-info/10 text-info border-info/20",
   "High": "bg-warning/10 text-warning border-warning/20",
   "Urgent": "bg-urgent/10 text-urgent border-urgent/20",
+  "Critical": "bg-urgent/10 text-urgent border-urgent/20",
+  "Moderate": "bg-info/10 text-info border-info/20",
 
   // Sync status
   "pending": "bg-warning/10 text-warning border-warning/20",
@@ -27,8 +30,10 @@ const statusStyles: Record<string, string> = {
   "failed": "bg-urgent/10 text-urgent border-urgent/20",
 };
 
-export function StatusBadge({ value, className }: StatusBadgeProps) {
-  const style = statusStyles[value] || "bg-muted text-muted-foreground border-border";
+export function StatusBadge({ value, type, className }: StatusBadgeProps) {
+  // Priorities are stored as long SLA strings; show the short word.
+  const label = type === "priority" ? priorityLabel(value) : value;
+  const style = statusStyles[label] || "bg-muted text-muted-foreground border-border";
 
   return (
     <span
@@ -38,7 +43,7 @@ export function StatusBadge({ value, className }: StatusBadgeProps) {
         className
       )}
     >
-      {value}
+      {label}
     </span>
   );
 }

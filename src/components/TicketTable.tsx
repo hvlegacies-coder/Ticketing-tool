@@ -1,6 +1,7 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { format } from "date-fns";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Plus } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -24,6 +25,22 @@ import { toast } from "sonner";
 import type { Tables } from "@/integrations/supabase/types";
 import { AiOrb } from "@/components/chat/AiOrb";
 import { initials } from "@/lib/organization";
+import { TicketTagsEditor } from "@/components/TicketTagsEditor";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { PRIORITY_CHOICES, TICKET_STATUSES, type TicketStatus, changeTicketStatus, setTicketPriority } from "@/lib/ticketActions";
+
+const inlineSelect =
+  "h-8 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50";
 
 export type TicketRow = Tables<"tickets"> & {
   assignee: { full_name: string | null; email: string | null } | null;
@@ -45,9 +62,53 @@ interface TicketTableProps {
   onAssigned?: () => void;
   /** Routing team key -> display name, for the team label on each row. */
   teamNames?: Record<string, string>;
+  /** For status emails (org name/portal link) and "resolved by". */
+  orgName?: string;
+  actorName?: string;
 }
 
-export function TicketTable({ tickets, isLoading, orgSlug, members = [], canAssign, onAssigned, teamNames = {} }: TicketTableProps) {
+export function TicketTable({
+  tickets,
+  isLoading,
+  orgSlug,
+  members = [],
+  canAssign,
+  onAssigned,
+  teamNames = {},
+  orgName,
+  actorName = "Support Team",
+}: TicketTableProps) {
+  const [pendingClose, setPendingClose] = useState<TicketRow | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const handlePriority = async (ticket: TicketRow, priority: string) => {
+    setBusyId(ticket.id);
+    const ok = await setTicketPriority(ticket.id, priority);
+    setBusyId(null);
+    if (ok) toast.success("Priority updated");
+    else toast.error("Failed to update priority");
+    onAssigned?.();
+  };
+
+  const runStatus = async (ticket: TicketRow, status: TicketStatus) => {
+    setBusyId(ticket.id);
+    try {
+      const { emailSent } = await changeTicketStatus(ticket, status, { orgName, orgSlug, actorName });
+      if (emailSent === false) toast.warning(`Status set to ${status}, but the customer email couldn't be sent.`);
+      else toast.success(emailSent ? `Status set to ${status} — customer emailed` : `Status set to ${status}`);
+    } catch {
+      toast.error("Failed to update status");
+    } finally {
+      setBusyId(null);
+      onAssigned?.();
+    }
+  };
+
+  const handleStatus = (ticket: TicketRow, status: TicketStatus) => {
+    if (status === "Closed") setPendingClose(ticket);
+    else void runStatus(ticket, status);
+  };
+
   const handleAssign = async (ticketId: string, userId: string) => {
     const { error } = await supabase
       .from("tickets")
@@ -130,7 +191,7 @@ export function TicketTable({ tickets, isLoading, orgSlug, members = [], canAssi
                   )}
                 </TableCell>
                 <TableCell>
-                  <div className="flex flex-wrap gap-1 max-w-[140px]">
+                  <div className="flex max-w-[160px] flex-wrap items-center gap-1">
                     {ticket.ticket_tags?.filter((tt) => tt.tags).map((tt) => (
                       <span
                         key={tt.tags!.id}
@@ -140,13 +201,62 @@ export function TicketTable({ tickets, isLoading, orgSlug, members = [], canAssi
                         {tt.tags!.name}
                       </span>
                     ))}
+                    {canAssign && (
+                      <Popover onOpenChange={(open) => !open && onAssigned?.()}>
+                        <PopoverTrigger asChild>
+                          <button
+                            aria-label={`Edit tags for ${ticket.issue_title}`}
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-dashed border-muted-foreground/50 text-muted-foreground hover:border-cyan hover:text-cyan"
+                          >
+                            <Plus className="h-3 w-3" />
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent align="start" className="w-72">
+                          <TicketTagsEditor ticketId={ticket.id} organizationId={ticket.organization_id} canEdit />
+                        </PopoverContent>
+                      </Popover>
+                    )}
                   </div>
                 </TableCell>
                 <TableCell>
-                  <StatusBadge value={ticket.priority} type="priority" />
+                  {canAssign ? (
+                    <select
+                      aria-label={`Priority for ${ticket.issue_title}`}
+                      value={ticket.priority}
+                      disabled={busyId === ticket.id}
+                      onChange={(e) => handlePriority(ticket, e.target.value)}
+                      className={inlineSelect}
+                    >
+                      {!PRIORITY_CHOICES.some((c) => c.value === ticket.priority) && (
+                        <option value={ticket.priority}>{ticket.priority}</option>
+                      )}
+                      {PRIORITY_CHOICES.map((c) => (
+                        <option key={c.value} value={c.value}>{c.label}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <StatusBadge value={ticket.priority} type="priority" />
+                  )}
                 </TableCell>
                 <TableCell>
-                  <StatusBadge value={ticket.status} type="status" />
+                  {canAssign ? (
+                    <select
+                      aria-label={`Status for ${ticket.issue_title}`}
+                      value={ticket.status}
+                      disabled={busyId === ticket.id}
+                      onChange={(e) => handleStatus(ticket, e.target.value as TicketStatus)}
+                      className={inlineSelect}
+                    >
+                      {!(TICKET_STATUSES as readonly string[]).includes(ticket.status) && (
+                        <option value={ticket.status}>{ticket.status}</option>
+                      )}
+                      {TICKET_STATUSES.map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <StatusBadge value={ticket.status} type="status" />
+                  )}
                 </TableCell>
                 <TableCell>
                   <div className="space-y-1">
@@ -206,6 +316,27 @@ export function TicketTable({ tickets, isLoading, orgSlug, members = [], canAssi
           })}
         </TableBody>
       </Table>
+      <AlertDialog open={pendingClose !== null} onOpenChange={(open) => !open && setPendingClose(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Close this ticket?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This marks "{pendingClose?.issue_title}" as resolved and will email the customer that it's closed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingClose) void runStatus(pendingClose, "Closed");
+                setPendingClose(null);
+              }}
+            >
+              Close ticket
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

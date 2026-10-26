@@ -251,6 +251,8 @@ const AdminDashboard = () => {
           canAssign={role === "owner" || role === "admin" || role === "agent"}
           onAssigned={() => queryClient.invalidateQueries({ queryKey: ["tickets", orgId] })}
           teamNames={teamNames}
+          orgName={organization?.name}
+          actorName={(user?.user_metadata?.full_name as string | undefined) || user?.email || "Support Team"}
         />
       </div>
     </AppShell>
