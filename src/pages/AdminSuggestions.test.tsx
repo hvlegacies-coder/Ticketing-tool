@@ -29,12 +29,18 @@ vi.mock("@/components/AppShell", () => ({ AppShell: ({ children }: { children: R
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
 import AdminSuggestions from "./AdminSuggestions";
+import { STATUS_TEMPLATES } from "@/lib/suggestions";
 
 const base = {
   organization_id: "o", author_name: "Ann", author_email: "ann@x.com", description: "d", category: "App",
   status: "Under review", is_hidden: false, vote_count: 1, created_at: "2026-10-20T00:00:00Z",
   staff_response: null, responded_at: null, merged_into: null,
 };
+
+// Radix Select calls these; jsdom lacks them.
+Element.prototype.scrollIntoView ??= vi.fn();
+Element.prototype.hasPointerCapture ??= () => false;
+Element.prototype.releasePointerCapture ??= vi.fn();
 
 beforeEach(() => {
   db.rows = [
@@ -62,6 +68,37 @@ describe("AdminSuggestions", () => {
     fireEvent.change(screen.getByLabelText("Official response"), { target: { value: "On the roadmap" } });
     fireEvent.click(screen.getByRole("button", { name: "Save response" }));
     await waitFor(() => expect(db.update).toHaveBeenCalledWith({ staff_response: "On the roadmap" }, "a"));
+  });
+
+  it("fills the note from a template for the current status", async () => {
+    renderPage();
+    const row = (await screen.findByText("Add dark mode")).closest("tr")!;
+    fireEvent.click(within(row).getByRole("button", { name: "Respond to Add dark mode" }));
+    fireEvent.click(screen.getByRole("button", { name: STATUS_TEMPLATES["Under review"][0] }));
+    expect(screen.getByLabelText("Official response")).toHaveValue(STATUS_TEMPLATES["Under review"][0]);
+    fireEvent.click(screen.getByRole("button", { name: "Save response" }));
+    await waitFor(() => expect(db.update).toHaveBeenCalledWith({ staff_response: STATUS_TEMPLATES["Under review"][0] }, "a"));
+  });
+
+  it("picking a status opens the note box and saves status and note together", async () => {
+    renderPage();
+    const row = (await screen.findByText("Add dark mode")).closest("tr")!;
+    fireEvent.keyDown(within(row).getByRole("combobox", { name: "Status of Add dark mode" }), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("option", { name: "Planned" }));
+    expect(await screen.findByText('Set status to "Planned"')).toBeInTheDocument();
+    expect(db.update).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: STATUS_TEMPLATES.Planned[0] }));
+    fireEvent.click(screen.getByRole("button", { name: "Save status & note" }));
+    await waitFor(() => expect(db.update).toHaveBeenCalledWith({ status: "Planned", staff_response: STATUS_TEMPLATES.Planned[0] }, "a"));
+  });
+
+  it("can change the status without a note", async () => {
+    renderPage();
+    const row = (await screen.findByText("Add dark mode")).closest("tr")!;
+    fireEvent.keyDown(within(row).getByRole("combobox", { name: "Status of Add dark mode" }), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("option", { name: "Done" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Change status without note" }));
+    await waitFor(() => expect(db.update).toHaveBeenCalledWith({ status: "Done" }, "a"));
   });
 
   it("merges a suggestion into another one", async () => {

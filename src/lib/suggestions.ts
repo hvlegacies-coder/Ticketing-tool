@@ -4,6 +4,30 @@ export const SUGGESTION_CATEGORIES = ["App", "System", "Service", "Other"] as co
 export const SUGGESTION_STATUSES = ["Under review", "Planned", "In progress", "Done", "Declined"] as const;
 export type SuggestionStatus = (typeof SUGGESTION_STATUSES)[number];
 
+/** Ready-made official responses, picked in the admin note box after a status change. */
+export const STATUS_TEMPLATES: Record<SuggestionStatus, string[]> = {
+  "Under review": [
+    "Thanks for sharing this idea! Our team is reviewing it now, and we'll update you as soon as we've decided.",
+    "Great suggestion! We're looking into how this could work for everyone. Keep the votes coming, they help us decide what to build first.",
+  ],
+  Planned: [
+    "Good news! We've added this to our plans. We'll let you know when work begins.",
+    "Thanks to everyone who voted. This is planned for an upcoming update.",
+  ],
+  "In progress": [
+    "We're working on this right now! We'll let you know as soon as it's ready.",
+    "Work has started on this idea. Thanks for your patience while we build and test it.",
+  ],
+  Done: [
+    "This is now live! Thanks for the great idea. Try it out and let us know what you think.",
+    "Done! This has been added. We appreciate you helping us make our apps better.",
+  ],
+  Declined: [
+    "Thank you for the suggestion. After review, we've decided not to move forward with this right now, but we appreciate you sharing it.",
+    "Thanks for the idea! This doesn't fit our current plans, but we'll keep it in mind for the future.",
+  ],
+};
+
 // Mirrors the CHECK constraints on public.suggestions.
 export const suggestionSchema = z.object({
   name: z.string().trim().min(1, "Enter your name").max(100),

@@ -24,9 +24,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useOrganization } from "@/hooks/useOrganization";
 import { supabase } from "@/integrations/supabase/client";
-import { STATUS_STYLES, SUGGESTION_STATUSES, type SuggestionStatus } from "@/lib/suggestions";
+import { STATUS_STYLES, STATUS_TEMPLATES, SUGGESTION_STATUSES, type SuggestionStatus } from "@/lib/suggestions";
 
 type Target = { id: string; title: string };
+/** Respond dialog target; newStatus is set when it opened from a status change. */
+type RespondTarget = Target & { status: SuggestionStatus; newStatus?: SuggestionStatus };
 
 const AdminSuggestions = () => {
   const { organization, role } = useOrganization();
@@ -36,7 +38,7 @@ const AdminSuggestions = () => {
   const canDelete = role === "owner" || role === "admin";
   const key = ["admin-suggestions", orgId];
 
-  const [respondTo, setRespondTo] = useState<Target | null>(null);
+  const [respondTo, setRespondTo] = useState<RespondTarget | null>(null);
   const [responseDraft, setResponseDraft] = useState("");
   const [mergeFrom, setMergeFrom] = useState<Target | null>(null);
   const [mergeTarget, setMergeTarget] = useState<string | null>(null);
@@ -64,9 +66,13 @@ const AdminSuggestions = () => {
     queryClient.invalidateQueries({ queryKey: key });
   };
 
-  const saveResponse = async () => {
+  // One update for status + note, so the author's status email includes the note.
+  const saveResponse = async (withNote = true) => {
     if (!respondTo) return;
-    await update(respondTo.id, { staff_response: responseDraft.trim() || null });
+    await update(respondTo.id, {
+      ...(respondTo.newStatus ? { status: respondTo.newStatus } : {}),
+      ...(withNote ? { staff_response: responseDraft.trim() || null } : {}),
+    });
     setRespondTo(null);
   };
 
@@ -157,7 +163,14 @@ const AdminSuggestions = () => {
                     </TableCell>
                     <TableCell className="text-right font-bold text-gold">{s.vote_count}</TableCell>
                     <TableCell>
-                      <Select value={s.status} onValueChange={(v) => update(s.id, { status: v })} disabled={!canModerate}>
+                      <Select
+                        value={s.status}
+                        onValueChange={(v) => {
+                          setRespondTo({ id: s.id, title: s.title, status: s.status as SuggestionStatus, newStatus: v as SuggestionStatus });
+                          setResponseDraft(s.staff_response ?? "");
+                        }}
+                        disabled={!canModerate}
+                      >
                         <SelectTrigger className={`h-8 w-36 ${STATUS_STYLES[s.status as SuggestionStatus]}`} aria-label={`Status of ${s.title}`}>
                           <SelectValue />
                         </SelectTrigger>
@@ -183,7 +196,7 @@ const AdminSuggestions = () => {
                           size="icon"
                           aria-label={`Respond to ${s.title}`}
                           onClick={() => {
-                            setRespondTo({ id: s.id, title: s.title });
+                            setRespondTo({ id: s.id, title: s.title, status: s.status as SuggestionStatus });
                             setResponseDraft(s.staff_response ?? "");
                           }}
                         >
@@ -237,11 +250,28 @@ const AdminSuggestions = () => {
       <Dialog open={respondTo !== null} onOpenChange={(o) => !o && setRespondTo(null)}>
         <DialogContent className="glass">
           <DialogHeader>
-            <DialogTitle>Respond to suggestion</DialogTitle>
+            <DialogTitle>{respondTo?.newStatus ? `Set status to "${respondTo.newStatus}"` : "Respond to suggestion"}</DialogTitle>
             <DialogDescription>
-              Shown publicly on "{respondTo?.title}" and included in the author's next status email.
+              Add a note for "{respondTo?.title}". It's shown publicly and included in the author's status email.
             </DialogDescription>
           </DialogHeader>
+          {respondTo && (
+            <div className="space-y-1.5">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Quick templates</p>
+              {STATUS_TEMPLATES[respondTo.newStatus ?? respondTo.status]?.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setResponseDraft(t)}
+                  className={`block w-full rounded-lg border px-3 py-2 text-left text-sm hover:bg-muted ${
+                    responseDraft === t ? "border-[#f5c84c] bg-[#f5c84c]/10" : "border-border"
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          )}
           <Textarea
             aria-label="Official response"
             rows={5}
@@ -250,8 +280,15 @@ const AdminSuggestions = () => {
             onChange={(e) => setResponseDraft(e.target.value)}
             placeholder="Thanks! This is planned for the next release."
           />
-          <DialogFooter>
-            <Button onClick={saveResponse} className="bg-gradient-gold text-primary-foreground">Save response</Button>
+          <DialogFooter className="gap-2">
+            {respondTo?.newStatus && (
+              <Button variant="outline" onClick={() => saveResponse(false)}>
+                Change status without note
+              </Button>
+            )}
+            <Button onClick={() => saveResponse()} className="bg-gradient-gold text-primary-foreground">
+              {respondTo?.newStatus ? "Save status & note" : "Save response"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
