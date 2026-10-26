@@ -191,11 +191,11 @@ export function TicketTable({
                   )}
                 </TableCell>
                 <TableCell>
-                  <div className="flex max-w-[160px] flex-wrap items-center gap-1">
+                  <div className="flex min-w-[140px] max-w-[220px] flex-wrap items-center gap-1">
                     {ticket.ticket_tags?.filter((tt) => tt.tags).map((tt) => (
                       <span
                         key={tt.tags!.id}
-                        className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium text-white"
+                        className="inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium leading-4 text-white"
                         style={{ backgroundColor: tt.tags!.color }}
                       >
                         {tt.tags!.name}
