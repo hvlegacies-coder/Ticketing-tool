@@ -27,7 +27,7 @@ vi.mock("@/components/ClientTicketMessages", () => ({
 
 import { SupportChatWidget } from "./SupportChatWidget";
 
-const GREETING = "Hi! Describe your issue and I'll help — or connect you to a person.";
+const GREETING = /Type your question below and I'll walk you through it/;
 
 beforeEach(() => {
   Object.values(chat).forEach((fn) => fn.mockReset());

@@ -30,7 +30,20 @@ import {
 
 const GREETING: ChatTurn = {
   role: "assistant",
-  content: "Hi! Describe your issue and I'll help — or connect you to a person.",
+  content: [
+    "👋 Hello, and welcome to **Higher View Legacies Support**!",
+    "",
+    "I'm your HigherView AI assistant, here for you 24/7. I can help with:",
+    "",
+    "- **TaxPractice**, **Contract Workspace**, and **Referral Circle** questions",
+    "- Your taxes, refunds, and documents",
+    "- Opening a support ticket, or checking one with your ticket number",
+    "- Booking a call with our team",
+    "",
+    "Type your question below and I'll walk you through it step by step.",
+    "",
+    "Prefer a real person? Tap **Talk to an agent** anytime.",
+  ].join("\n"),
 };
 const OPEN_TICKET_PROMPT = "I'd like to open a support ticket.";
 
@@ -272,7 +285,7 @@ export function SupportChatWidget({ organizationId, orgName, orgSlug, embedded =
                     <img src={m.image.previewUrl} alt="Your photo" className="mb-1.5 max-h-40 w-full rounded-lg object-cover ring-1 ring-black/20" />
                   )}
                   {m.role === "assistant" ? (
-                    <div className="prose prose-sm prose-invert max-w-none break-words [&>p]:m-0 [&_a]:text-cyan">
+                    <div className="break-words [&>*+*]:mt-2 [&_strong]:font-semibold [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-5 [&_ol]:pl-5 [&_li]:my-0.5 [&_a]:text-cyan">
                       <ReactMarkdown>{m.content}</ReactMarkdown>
                     </div>
                   ) : (
