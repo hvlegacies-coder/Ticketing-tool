@@ -21,11 +21,15 @@ describe("buildTicketEmail", () => {
     expect(widths.filter((w) => w > 300)).toEqual([]);
   });
 
-  it.each(["received", "processing", "resolved"] as const)("%s: shows the ticket number, chat link and portal link", (kind) => {
+  it.each(["received", "processing", "resolved"] as const)("%s: only the greeting and ticket-number box, no summary", (kind) => {
     const { html, subject } = buildTicketEmail(kind, base);
+    expect(html).toContain("Hi Ann Lee,");
     expect(html).toContain("1A2B3C4D");
-    expect(html).toContain('href="https://app.x/t/tok"');
     expect(html).toContain('href="https://app.x/support/hv"');
+    expect(html).toContain("This is the fastest way you can connect to us");
+    for (const gone of ["summary", "What happens next", "Priority", "Open Messages", "View Ticket Messages", 'href="https://app.x/t/tok"']) {
+      expect(html).not.toContain(gone);
+    }
     expect(subject).toContain("#1A2B3C4D");
   });
 
@@ -33,7 +37,6 @@ describe("buildTicketEmail", () => {
     expect(buildTicketEmail("received", base).html).toContain("Your support ticket has been received");
     expect(buildTicketEmail("processing", base).html).toContain("is now being actively worked on by our team");
     expect(buildTicketEmail("resolved", { ...base, resolvedBy: "Les" }).html).toContain("has been resolved and closed");
-    expect(buildTicketEmail("resolved", { ...base, resolvedBy: "Les" }).html).toContain("Les");
   });
 
   it("uses the original subjects", () => {
@@ -46,18 +49,7 @@ describe("buildTicketEmail", () => {
     const { html } = buildTicketEmail("received", { ...base, clientName: "<b>x</b>", issueTitle: '<img src=x onerror="a()">' });
     expect(html).not.toContain("<img src=x");
     expect(html).not.toContain("<b>x</b>");
-    expect(html).toContain("&lt;img src=x");
-  });
-
-  it("omits optional rows that are empty", () => {
-    const { html } = buildTicketEmail("received", { ...base, issueCategory: undefined, companyName: undefined });
-    expect(html).not.toContain(">Category<");
-    expect(html).not.toContain(">Company<");
-  });
-
-  it("only links http(s) URLs", () => {
-    const { html } = buildTicketEmail("received", { ...base, chatLink: "javascript:alert(1)" });
-    expect(html).not.toContain("javascript:");
+    expect(html).toContain("&lt;b&gt;x&lt;/b&gt;");
   });
 });
 

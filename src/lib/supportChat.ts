@@ -2,7 +2,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { generateClientAccessToken } from "@/lib/utils";
 
 export type ChatImage = { media_type: "image/jpeg" | "image/png" | "image/webp" | "image/gif"; data: string; previewUrl?: string };
-export type ChatTurn = { role: "user" | "assistant"; content: string; image?: ChatImage };
+// bookingUrl is browser-only (the "Book a call" button under a ticket lookup reply).
+export type ChatTurn = { role: "user" | "assistant"; content: string; image?: ChatImage; bookingUrl?: string };
 
 /** Text-only view of a turn: photos become a "[photo]" marker (option A: photos are never stored). */
 const textOnly = (m: ChatTurn) => (m.image ? `[photo]${m.content ? " " + m.content : ""}` : m.content);
@@ -29,6 +30,8 @@ export type AiResult = {
   aiDisabled?: boolean;
   /** The AI couldn't be reached: show the fallback message form. */
   unavailable?: boolean;
+  /** The customer typed a ticket number; bookingUrl only while it's still open. */
+  trackedTicket?: { ref: string; status: string; bookingUrl?: string };
 };
 
 export const AI_FALLBACK_TEXT =
@@ -54,6 +57,7 @@ export async function sendAiMessage(organizationId: string, messages: ChatTurn[]
       ...(data.ticketDraft ? { ticketDraft: data.ticketDraft as TicketDraft } : {}),
       ...(data.aiDisabled ? { aiDisabled: true } : {}),
       ...(typeof data.handoffTeam === "string" ? { handoffTeam: data.handoffTeam } : {}),
+      ...(data.trackedTicket ? { trackedTicket: data.trackedTicket } : {}),
     };
   } catch {
     return fallback;

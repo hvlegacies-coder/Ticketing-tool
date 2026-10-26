@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Camera, FilePlus2, MessageCircle, Search, Send, UserRound, X } from "lucide-react";
-import { format, formatDistanceToNow } from "date-fns";
+import { CalendarDays, Camera, FilePlus2, MessageCircle, Search, Send, UserRound, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -13,7 +12,7 @@ import { MessageForm } from "@/components/chat/MessageForm";
 import { ThinkingWave } from "@/components/chat/ThinkingWave";
 import { TicketDraftCard } from "@/components/chat/TicketDraftCard";
 import { TrackTicketCard } from "@/components/chat/TrackTicketCard";
-import { formatTicketRef, trackTicket } from "@/lib/tracking";
+import { formatTicketRef, normalizeTicketRef } from "@/lib/tracking";
 import {
   type ChatImage,
   type ChatTurn,
@@ -54,7 +53,6 @@ export function SupportChatWidget({ organizationId, orgName, orgSlug, embedded =
   const [ticketDraft, setTicketDraft] = useState<TicketDraft | null>(null);
   const [showMessageForm, setShowMessageForm] = useState(false);
   const [showTracker, setShowTracker] = useState(false);
-  const [checking, setChecking] = useState(false);
   const [handoffTeam, setHandoffTeam] = useState<string | undefined>(undefined);
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -103,7 +101,8 @@ export function SupportChatWidget({ organizationId, orgName, orgSlug, embedded =
     setPendingPhoto(null);
     setIsLoading(true);
     const result = await sendAiMessage(organizationId, next);
-    setMessages((prev) => [...prev, { role: "assistant", content: result.reply }]);
+    const bookingUrl = result.trackedTicket?.bookingUrl;
+    setMessages((prev) => [...prev, { role: "assistant", content: result.reply, ...(bookingUrl ? { bookingUrl } : {}) }]);
     if (result.handoff) {
       setShowHandoff(true);
       setHandoffTeam(result.handoffTeam);
@@ -185,26 +184,10 @@ export function SupportChatWidget({ organizationId, orgName, orgSlug, embedded =
       confirmCreated(ticketId, token);
     }, "Couldn't send your message. Please try again.");
 
-  const lookUpTicket = async (input: string) => {
-    if (!orgSlug) return;
-    setChecking(true);
-    let reply: string;
-    try {
-      const t = await trackTicket(orgSlug, input);
-      reply = t
-        ? `Ticket #${t.ticket_ref} · **${t.status}** · opened ${format(new Date(t.created_at), "MMM d")} · last update ${formatDistanceToNow(new Date(t.updated_at), { addSuffix: true })} · ${
-            t.team_replied
-              ? "our team has replied — check your email for your private chat link."
-              : "our team will reply soon. Your private chat link is in your confirmation email."
-          }`
-        : "We couldn't find that ticket number. Check your confirmation email — it's the 8 characters after the #.";
-      setShowTracker(false);
-    } catch {
-      reply = "Couldn't check right now — please try again in a moment.";
-    } finally {
-      setChecking(false);
-    }
-    setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
+  // The AI looks the ticket up and summarizes it (support-chat sees the number).
+  const lookUpTicket = (input: string) => {
+    setShowTracker(false);
+    return send(`My ticket number is ${normalizeTicketRef(input) ?? input.trim()}`);
   };
 
   const endLiveChat = async () => {
@@ -295,6 +278,16 @@ export function SupportChatWidget({ organizationId, orgName, orgSlug, embedded =
                   ) : (
                     m.content
                   )}
+                  {m.bookingUrl && (
+                    <a
+                      href={m.bookingUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 flex items-center justify-center gap-2 rounded-xl bg-gradient-gold px-3 py-2.5 text-sm font-bold text-primary-foreground glow-gold"
+                    >
+                      <CalendarDays className="h-4 w-4" /> Book a call
+                    </a>
+                  )}
                 </div>
               </div>
             ))}
@@ -305,7 +298,7 @@ export function SupportChatWidget({ organizationId, orgName, orgSlug, embedded =
             )}
             {ticketDraft && <TicketDraftCard draft={ticketDraft} submitting={submitting} onSubmit={submitDraft} />}
             {showMessageForm && <MessageForm submitting={submitting} onSubmit={submitMessage} />}
-            {showTracker && <TrackTicketCard checking={checking} onLookup={lookUpTicket} />}
+            {showTracker && <TrackTicketCard checking={isLoading} onLookup={lookUpTicket} />}
             {showHandoff && <HandoffForm onSubmit={startLiveChat} submitting={submitting} />}
           </div>
 

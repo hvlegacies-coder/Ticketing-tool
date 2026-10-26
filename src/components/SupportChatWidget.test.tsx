@@ -16,12 +16,6 @@ vi.mock("@/lib/supportChat", async (importOriginal) => ({
   ...chat,
 }));
 
-const track = vi.hoisted(() => ({ trackTicket: vi.fn() }));
-vi.mock("@/lib/tracking", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/tracking")>()),
-  ...track,
-}));
-
 // Capture the live thread's props so tests can simulate an agent joining.
 const live = vi.hoisted(() => ({ props: null as null | { token: string; onSupportJoined?: (n: string) => void } }));
 vi.mock("@/components/ClientTicketMessages", () => ({
@@ -37,7 +31,6 @@ const GREETING = "Hi! Describe your issue and I'll help — or connect you to a 
 
 beforeEach(() => {
   Object.values(chat).forEach((fn) => fn.mockReset());
-  track.trackTicket.mockReset();
   chat.loadLiveSession.mockReturnValue(null);
   live.props = null;
 });
@@ -210,31 +203,29 @@ describe("SupportChatWidget", () => {
     expect(screen.getByRole("button", { name: /Open a ticket/ })).toBeInTheDocument();
   });
 
-  it("tracks a ticket by number and shows its status", async () => {
-    track.trackTicket.mockResolvedValue({
-      ticket_ref: "1A2B3C4D",
-      status: "In Progress",
-      created_at: "2026-10-20T10:00:00Z",
-      updated_at: new Date().toISOString(),
-      team_replied: true,
+  it("Track ticket sends the number to the AI and shows Book a call for open tickets", async () => {
+    chat.sendAiMessage.mockResolvedValue({
+      reply: "Ticket #1A2B3C4D is still open. The team is still working on it.",
+      handoff: false,
+      trackedTicket: { ref: "1A2B3C4D", status: "Processing", bookingUrl: "https://cal.example/book" },
     });
     render(<SupportChatWidget organizationId="org-1" orgSlug="hv" embedded />);
     fireEvent.click(screen.getByRole("button", { name: /Track ticket/ }));
     fireEvent.change(screen.getByLabelText("Ticket number"), { target: { value: "#1a2b3c4d" } });
     fireEvent.click(screen.getByRole("button", { name: "Check status" }));
-    expect(await screen.findByText(/Ticket #1A2B3C4D/)).toBeInTheDocument();
-    expect(screen.getByText(/In Progress/)).toBeInTheDocument();
-    expect(screen.getByText(/our team has replied/)).toBeInTheDocument();
-    expect(track.trackTicket).toHaveBeenCalledWith("hv", "#1a2b3c4d");
+    expect(await screen.findByText(/The team is still working on it/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Book a call/ })).toHaveAttribute("href", "https://cal.example/book");
+    const sent = chat.sendAiMessage.mock.calls[0][1];
+    expect(sent[sent.length - 1].content).toBe("My ticket number is 1A2B3C4D");
   });
 
-  it("says when a ticket number isn't found", async () => {
-    track.trackTicket.mockResolvedValue(null);
+  it("no Book a call button for closed tickets", async () => {
+    chat.sendAiMessage.mockResolvedValue({ reply: "It's resolved.", handoff: false, trackedTicket: { ref: "1A2B3C4D", status: "Closed" } });
     render(<SupportChatWidget organizationId="org-1" orgSlug="hv" embedded />);
-    fireEvent.click(screen.getByRole("button", { name: /Track ticket/ }));
-    fireEvent.change(screen.getByLabelText("Ticket number"), { target: { value: "FFFFFFFF" } });
-    fireEvent.click(screen.getByRole("button", { name: "Check status" }));
-    expect(await screen.findByText(/couldn't find that ticket number/)).toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText("Type a message…"), { target: { value: "1A2B3C4D" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    expect(await screen.findByText("It's resolved.")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Book a call/ })).not.toBeInTheDocument();
   });
 
   it("asks for 8 characters before looking anything up", () => {
@@ -243,7 +234,7 @@ describe("SupportChatWidget", () => {
     fireEvent.change(screen.getByLabelText("Ticket number"), { target: { value: "12" } });
     fireEvent.click(screen.getByRole("button", { name: "Check status" }));
     expect(screen.getByRole("alert")).toHaveTextContent("8 characters");
-    expect(track.trackTicket).not.toHaveBeenCalled();
+    expect(chat.sendAiMessage).not.toHaveBeenCalled();
   });
 
   it("shows 8-character ticket numbers after creating a ticket", async () => {

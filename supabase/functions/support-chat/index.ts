@@ -14,6 +14,7 @@ import {
 } from "../_shared/chatLogic.ts";
 import { TICKET_CATEGORIES, TICKET_PRIORITIES } from "../_shared/ticketOptions.ts";
 import { knowledgeBlock } from "../_shared/knowledge/knowledgeBase.ts";
+import { type TicketOverview, findTicketRef, ticketLookupNote, trackedTicket } from "../_shared/ticketLookup.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -167,7 +168,7 @@ Customers may send photos (screenshots, error messages, tax forms like W-2s or 1
 
 const TICKET_INSTRUCTION = `
 
-This chat replaces the ticket form. When the issue needs follow-up from our team (an account problem, a refund or filing question you can't answer, a bug, a document problem), or the customer asks to open a ticket, call ${TICKET_TOOL_NAME} with a clear title, the best-fitting category, a priority, and a summary of everything learned so far (including your description of any photos, without sensitive numbers). Don't ask for their name or email — the form after your call collects them. Prefer ${TICKET_TOOL_NAME} for issues that can wait; use ${HANDOFF_TOOL_NAME} only when they want to talk to a person now.`;
+This chat replaces the ticket form. When the issue needs follow-up from our team (an account problem, a refund or filing question you can't answer, a bug, a document problem), or the customer asks to open a ticket, call ${TICKET_TOOL_NAME} with a clear title, the best-fitting category, a priority, and a summary of everything learned so far (including your description of any photos, without sensitive numbers). If the issue is about one of our apps (TaxPractice, the Contract Workspace, or Referral Circle), name the app in the title so the ticket is tagged. Don't ask for their name or email — the form after your call collects them. Prefer ${TICKET_TOOL_NAME} for issues that can wait; use ${HANDOFF_TOOL_NAME} only when they want to talk to a person now.`;
 
 // Team is required (strict mode) whenever the org has routing teams.
 function teamProperty(teamKeys: string[]) {
@@ -251,7 +252,7 @@ serve(async (req) => {
 
   const { data: org } = await supabaseAdmin
     .from("organizations")
-    .select("id")
+    .select("id, booking_url")
     .eq("id", parsed.organizationId)
     .maybeSingle();
   if (!org) return json({ error: "unknown_organization" }, 400);
@@ -293,6 +294,16 @@ serve(async (req) => {
   const messages = toApiMessages(parsed.messages);
   if (messages.length === 0) return json({ error: "invalid_body" }, 400);
 
+  // Customer typed a ticket number: load it so the AI can summarize it.
+  const latest = parsed.messages[parsed.messages.length - 1];
+  const ref = latest?.role === "user" ? findTicketRef(latest.content) : null;
+  let lookup: TicketOverview | null = null;
+  if (ref) {
+    const { data, error } = await supabaseAdmin.rpc("chat_ticket_overview", { _org: parsed.organizationId, _ref: ref });
+    if (error) console.error("support-chat ticket lookup error:", error.message);
+    lookup = (data as TicketOverview | null) ?? null;
+  }
+
   try {
     const response = await anthropic.beta.messages.create({
       model: "claude-opus-5-5",
@@ -307,12 +318,14 @@ serve(async (req) => {
           text: [systemPrompt, knowledgeBlock(), HANDOFF_INSTRUCTION + TICKET_INSTRUCTION + teamInstruction(teams)].join("\n\n"),
           cache_control: { type: "ephemeral" },
         },
+        ...(ref ? [{ type: "text" as const, text: ticketLookupNote(ref, lookup, !!org.booking_url) }] : []),
       ],
       tools: [requestHumanAgentTool(teamKeys), createTicketTool(teamKeys)],
       tool_choice: { type: "auto" },
       messages,
     });
-    return json(parseChatResult(response, teamKeys));
+    const tracked = trackedTicket(lookup, org.booking_url);
+    return json({ ...parseChatResult(response, teamKeys), ...(tracked ? { trackedTicket: tracked } : {}) });
   } catch (error: unknown) {
     if (error instanceof Anthropic.APIError) {
       console.error("support-chat Claude API error:", error.status, error.message);
