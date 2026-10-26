@@ -1,4 +1,5 @@
 import { appUrl } from "../_shared/appUrl.ts";
+import { ticketNumberBlock } from "../_shared/ticketNumberBlock.ts";
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
@@ -19,7 +20,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { ticketId, email, clientName, issueTitle, priority, issueCategory, department, chatLink: providedChatLink, orgName } = await req.json()
+    const { ticketId, email, clientName, issueTitle, priority, issueCategory, department, chatLink: providedChatLink, orgName, portalUrl } = await req.json()
 
     if (!ticketId || !email || !clientName || !issueTitle) {
       return new Response(
@@ -69,6 +70,8 @@ Deno.serve(async (req) => {
         We wanted to let you know that your support ticket <strong style="color: #2563eb;">#${shortId}</strong> is now being actively worked on by our team. Here's a summary:
       </p>
       
+      ${ticketNumberBlock(ticketId, portalUrl)}
+
       <!-- Ticket Summary Card -->
       <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; margin: 0 0 24px;">
         <div style="background: #eff6ff; padding: 14px 20px; border-bottom: 1px solid #bfdbfe;">

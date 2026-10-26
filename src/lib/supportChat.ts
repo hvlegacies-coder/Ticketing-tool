@@ -74,6 +74,12 @@ async function insertTicket(fields: Record<string, unknown>): Promise<{ ticketId
   return { ticketId, token };
 }
 
+// The org's support page, so emails can point customers to Track ticket.
+function currentPortalUrl(): string | undefined {
+  const m = window.location.pathname.match(/^\/support\/([^/]+)/);
+  return m ? `${window.location.origin}/support/${m[1]}` : undefined;
+}
+
 // Confirmation email with the private chat link; never blocks ticket creation.
 async function sendConfirmationEmail(p: {
   ticketId: string;
@@ -98,6 +104,7 @@ async function sendConfirmationEmail(p: {
         companyName: p.company,
         chatLink: `${window.location.origin}/t/${p.token}`,
         orgName: p.orgName,
+        portalUrl: currentPortalUrl(),
       },
     });
   } catch (err) {

@@ -139,6 +139,7 @@ const TicketDetails = () => {
             resolvedBy: user?.user_metadata?.full_name || user?.email || "Support Team",
             chatLink: `${window.location.origin}/t/${ticket.client_access_token}`,
             orgName: organization?.name,
+            portalUrl: organization ? `${window.location.origin}/support/${organization.slug}` : undefined,
           },
         });
       } catch (emailErr) {
@@ -180,6 +181,7 @@ const TicketDetails = () => {
             department: ticket.department,
             chatLink: `${window.location.origin}/t/${ticket.client_access_token}`,
             orgName: organization?.name,
+            portalUrl: organization ? `${window.location.origin}/support/${organization.slug}` : undefined,
           },
         });
       } catch (emailErr) {

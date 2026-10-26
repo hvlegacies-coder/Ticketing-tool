@@ -219,3 +219,29 @@ describe("tickets from chat", () => {
     expect(insert.mock.calls[0][0].priority).toBe("Moderate (single user or workaround available)");
   });
 });
+
+describe("confirmation email portal link", () => {
+  const draft = {
+    title: "T",
+    category: "Other",
+    priority: "Moderate (single user or workaround available)",
+    summary: "S",
+  };
+
+  it("includes the support page URL so the email can link to Track ticket", async () => {
+    window.history.pushState({}, "", "/support/higher-view-legacy");
+    insert.mockResolvedValue({ error: null });
+    invoke.mockResolvedValue({ data: {}, error: null });
+    await createTicketFromChat({ organizationId: "o", name: "Ann", email: "a@x.com", company: "", draft, turns: [] });
+    expect(invoke.mock.calls[0][1].body.portalUrl).toBe(`${window.location.origin}/support/higher-view-legacy`);
+    window.history.pushState({}, "", "/");
+  });
+
+  it("leaves the portal URL out when not on a support page", async () => {
+    window.history.pushState({}, "", "/");
+    insert.mockResolvedValue({ error: null });
+    invoke.mockResolvedValue({ data: {}, error: null });
+    await createTicketFromChat({ organizationId: "o", name: "Ann", email: "a@x.com", company: "", draft, turns: [] });
+    expect(invoke.mock.calls[0][1].body.portalUrl).toBeUndefined();
+  });
+});
