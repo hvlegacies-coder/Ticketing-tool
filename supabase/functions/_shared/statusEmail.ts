@@ -28,8 +28,8 @@ export function buildStatusEmail(input: {
 
   const html = `<!DOCTYPE html>
 <html>
-<body style="margin:0;padding:24px;background:#070b1a;font-family:Inter,Arial,sans-serif;color:#dbe6ff;">
-  <div style="max-width:560px;margin:0 auto;padding:28px;border:1px solid #0e4a5a;border-radius:14px;background:#0a1228;">
+<body style="margin:0;padding:12px 8px;background:#070b1a;font-family:Inter,Arial,sans-serif;color:#dbe6ff;">
+  <div style="max-width:560px;margin:0 auto;padding:22px 18px;border:1px solid #0e4a5a;border-radius:14px;background:#0a1228;word-break:break-word;overflow-wrap:anywhere;">
     <p style="margin:0 0 4px;font-size:12px;letter-spacing:.18em;color:#00e5ff;">${e.org.toUpperCase()} · SUGGESTIONS</p>
     <h1 style="margin:0 0 16px;font-size:20px;color:#ffffff;">Your idea has an update</h1>
     <p style="margin:0 0 12px;">Hi ${e.name},</p>
