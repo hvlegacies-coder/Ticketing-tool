@@ -5,7 +5,10 @@ vi.mock("@/integrations/supabase/client", () => ({ supabase: { rpc } }));
 
 import { formatTicketRef, normalizeTicketRef, trackTicket } from "./tracking";
 
-beforeEach(() => rpc.mockReset());
+// Block body: returning the mock would make Vitest call it as a teardown.
+beforeEach(() => {
+  rpc.mockReset();
+});
 
 describe("normalizeTicketRef", () => {
   it.each([

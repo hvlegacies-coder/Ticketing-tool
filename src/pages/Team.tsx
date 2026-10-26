@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { UserPlus, Loader2, Trash2, Mail, Clock } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { RoutingTeams } from "@/components/RoutingTeams";
+import { inviteLink, sendInviteEmail } from "@/lib/invites";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -89,27 +90,33 @@ const Team = () => {
         .single();
       if (error) throw error;
 
-      try {
-        await supabase.functions.invoke("send-invitation-email", {
-          body: {
-            email: invite.email,
-            orgName: organization?.name,
-            role: inviteRole,
-            inviteLink: `${window.location.origin}/invite/${invite.token}`,
-          },
+      if (await sendInviteEmail(invite, organization?.name)) {
+        toast.success(`Invitation emailed to ${invite.email}`);
+      } else {
+        toast.warning(`Invite created, but the email to ${invite.email} couldn't be sent.`, {
+          description: "Use Copy link in Pending invitations and send it yourself.",
         });
-      } catch (emailErr) {
-        console.error("Invite email error (non-blocking):", emailErr);
-        toast.info("Invite created, but the email couldn't be sent — share the link manually.");
       }
-
-      toast.success(`Invitation sent to ${invite.email}`);
       setInviteEmail("");
       queryClient.invalidateQueries({ queryKey: ["team-invitations", orgId] });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to send invitation");
     } finally {
       setInviting(false);
+    }
+  };
+
+  const handleResend = async (inv: { email: string; role: string; token: string }) => {
+    if (await sendInviteEmail(inv, organization?.name)) toast.success(`Invitation re-sent to ${inv.email}`);
+    else toast.error(`Couldn't send the email to ${inv.email}. Use Copy link instead.`);
+  };
+
+  const handleCopyLink = async (token: string) => {
+    try {
+      await navigator.clipboard.writeText(inviteLink(token));
+      toast.success("Invite link copied");
+    } catch {
+      toast.info(inviteLink(token));
     }
   };
 
@@ -201,9 +208,17 @@ const Team = () => {
                       </p>
                     </div>
                   </div>
-                  <Button variant="ghost" size="sm" onClick={() => handleRevoke(inv.id)} className="text-muted-foreground hover:text-destructive">
-                    Revoke
-                  </Button>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => handleResend(inv)}>
+                      Resend
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => handleCopyLink(inv.token)}>
+                      Copy link
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => handleRevoke(inv.id)} className="text-muted-foreground hover:text-destructive">
+                      Revoke
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
