@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.send-suggestion-status-email]
 verify_jwt = false
+
+[functions.send-staff-ticket-email]
+verify_jwt = false
