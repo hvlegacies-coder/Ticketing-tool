@@ -38,7 +38,7 @@ const Signup = () => {
         navigate(redirectTo);
       } else {
         toast.success("Check your email to confirm your account, then sign in.");
-        navigate("/login");
+        navigate("/login", { state: { from: redirectTo } });
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Sign up failed");

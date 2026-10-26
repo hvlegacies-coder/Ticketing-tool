@@ -802,6 +802,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_my_pending_invitations: {
+        Args: Record<PropertyKey, never>
+        Returns: { organization_id: string; slug: string; role: string }[]
+      }
       end_chat_by_token: {
         Args: { _token: string }
         Returns: boolean

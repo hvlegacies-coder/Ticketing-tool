@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Building2, ArrowRight, Loader2, LogOut } from "lucide-react";
@@ -18,12 +18,42 @@ const AppHome = () => {
   const { data: orgs, isLoading, invalidate } = useMyOrganizations();
   const [orgName, setOrgName] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [checkingInvites, setCheckingInvites] = useState(true);
+  // Latest callbacks without re-running the one-time invite check
+  // (useMyOrganizations returns a new invalidate function every render).
+  const callbacks = useRef({ invalidate, navigate });
+  callbacks.current = { invalidate, navigate };
+
+  // Invited staff join the inviting org even if they lost the invite link
+  // (e.g. the confirmation email sent them elsewhere) — before anything else.
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase.rpc("accept_my_pending_invitations");
+        const joined = !error && Array.isArray(data) ? data : [];
+        if (!cancelled && joined.length > 0) {
+          toast.success("You've joined your team's workspace");
+          callbacks.current.invalidate();
+          callbacks.current.navigate(`/app/${joined[0].slug}/dashboard`, { replace: true });
+          return;
+        }
+      } catch {
+        // fall through to the normal home screen
+      }
+      if (!cancelled) setCheckingInvites(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   useEffect(() => {
-    if (orgs && orgs.length === 1) {
+    if (!checkingInvites && orgs && orgs.length === 1) {
       navigate(`/app/${orgs[0].organization.slug}/dashboard`, { replace: true });
     }
-  }, [orgs, navigate]);
+  }, [checkingInvites, orgs, navigate]);
 
   const handleCreateOrg = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,7 +99,7 @@ const AppHome = () => {
     navigate("/login");
   };
 
-  if (isLoading) {
+  if (isLoading || checkingInvites) {
     return (
       <div className="flex min-h-screen items-center justify-center grid-bg">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
