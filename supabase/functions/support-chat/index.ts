@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Anthropic from "npm:@anthropic-ai/sdk";
 import {
+  BOOKING_TOOL_NAME,
   HANDOFF_TOOL_NAME,
   TICKET_TOOL_NAME,
   type RoutingTeam,
@@ -14,7 +15,7 @@ import {
 } from "../_shared/chatLogic.ts";
 import { TICKET_CATEGORIES, TICKET_PRIORITIES } from "../_shared/ticketOptions.ts";
 import { knowledgeBlock } from "../_shared/knowledge/knowledgeBase.ts";
-import { type TicketOverview, findTicketRef, ticketLookupNote, trackedTicket } from "../_shared/ticketLookup.ts";
+import { BOOKING_HOURS, type TicketOverview, findTicketRef, ticketLookupNote, trackedTicket } from "../_shared/ticketLookup.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -60,7 +61,6 @@ We are virtual, professional, supportive, opportunity-driven, and focused on lon
 
 **Client Portals & Links:**
 - Client Portal (document upload & tracking): https://maze-client-portal-c02901cf.base44.app/
-- Schedule a Demo / Booking: https://www.mazecrm.com/booking-calendar
 - Staff Portal: https://app.higherviewlegacies.com/
 - Document Upload Form: https://api.leadconnectorhq.com/widget/form/Y7UZVEVsSjSxi2q7oAv0
 
@@ -212,6 +212,18 @@ function requestHumanAgentTool(teamKeys: string[]) {
   };
 }
 
+// One booking calendar for every call or demo; the widget shows the button.
+const BOOKING_INSTRUCTION = `
+
+When someone wants to book a call, a demo, or a meeting with our team, call ${BOOKING_TOOL_NAME}. There is one booking calendar for all calls, available ${BOOKING_HOURS}. Never write out a booking link or URL: a "Book a call" button appears under your reply.`;
+
+const bookingTool = {
+  name: BOOKING_TOOL_NAME,
+  description: "Show the customer a Book a call button for our booking calendar (calls, demos, meetings).",
+  strict: true,
+  input_schema: { type: "object" as const, properties: {}, additionalProperties: false },
+};
+
 function teamInstruction(teams: RoutingTeam[]): string {
   const guide = buildTeamGuide(teams);
   return guide
@@ -315,17 +327,22 @@ serve(async (req) => {
       system: [
         {
           type: "text",
-          text: [systemPrompt, knowledgeBlock(), HANDOFF_INSTRUCTION + TICKET_INSTRUCTION + teamInstruction(teams)].join("\n\n"),
+          text: [systemPrompt, knowledgeBlock(), HANDOFF_INSTRUCTION + TICKET_INSTRUCTION + (org.booking_url ? BOOKING_INSTRUCTION : "") + teamInstruction(teams)].join("\n\n"),
           cache_control: { type: "ephemeral" },
         },
         ...(ref ? [{ type: "text" as const, text: ticketLookupNote(ref, lookup, !!org.booking_url) }] : []),
       ],
-      tools: [requestHumanAgentTool(teamKeys), createTicketTool(teamKeys)],
+      tools: [requestHumanAgentTool(teamKeys), createTicketTool(teamKeys), ...(org.booking_url ? [bookingTool] : [])],
       tool_choice: { type: "auto" },
       messages,
     });
     const tracked = trackedTicket(lookup, org.booking_url);
-    return json({ ...parseChatResult(response, teamKeys), ...(tracked ? { trackedTicket: tracked } : {}) });
+    const { booking, ...result } = parseChatResult(response, teamKeys);
+    return json({
+      ...result,
+      ...(tracked ? { trackedTicket: tracked } : {}),
+      ...(booking && org.booking_url ? { bookingUrl: org.booking_url } : {}),
+    });
   } catch (error: unknown) {
     if (error instanceof Anthropic.APIError) {
       console.error("support-chat Claude API error:", error.status, error.message);

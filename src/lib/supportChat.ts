@@ -2,7 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { generateClientAccessToken } from "@/lib/utils";
 
 export type ChatImage = { media_type: "image/jpeg" | "image/png" | "image/webp" | "image/gif"; data: string; previewUrl?: string };
-// bookingUrl is browser-only (the "Book a call" button under a ticket lookup reply).
+// bookingUrl is browser-only (the "Book a call" button under an AI reply).
 export type ChatTurn = { role: "user" | "assistant"; content: string; image?: ChatImage; bookingUrl?: string };
 
 /** Text-only view of a turn: photos become a "[photo]" marker (option A: photos are never stored). */
@@ -32,6 +32,8 @@ export type AiResult = {
   unavailable?: boolean;
   /** The customer typed a ticket number; bookingUrl only while it's still open. */
   trackedTicket?: { ref: string; status: string; bookingUrl?: string };
+  /** The AI offered a call: show the Book a call button. */
+  bookingUrl?: string;
 };
 
 export const AI_FALLBACK_TEXT =
@@ -58,6 +60,7 @@ export async function sendAiMessage(organizationId: string, messages: ChatTurn[]
       ...(data.aiDisabled ? { aiDisabled: true } : {}),
       ...(typeof data.handoffTeam === "string" ? { handoffTeam: data.handoffTeam } : {}),
       ...(data.trackedTicket ? { trackedTicket: data.trackedTicket } : {}),
+      ...(typeof data.bookingUrl === "string" && /^https?:\/\//i.test(data.bookingUrl) ? { bookingUrl: data.bookingUrl } : {}),
     };
   } catch {
     return fallback;

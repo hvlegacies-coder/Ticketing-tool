@@ -20,6 +20,7 @@ export const MAX_MESSAGE_CHARS = 2000;
 export const MAX_IMAGE_BASE64 = 7_000_000;
 export const HANDOFF_TOOL_NAME = "request_human_agent";
 export const TICKET_TOOL_NAME = "create_ticket";
+export const BOOKING_TOOL_NAME = "offer_booking_call";
 
 export type TicketDraft = { title: string; category: string; priority: string; summary: string; team?: string };
 export type RoutingTeam = { key: string; name: string; description: string };
@@ -33,6 +34,7 @@ export const PHOTO_PLACEHOLDER = "[customer shared a photo]";
 
 const HANDOFF_DEFAULT_REPLY = "Sure — I'll connect you with a team member.";
 const TICKET_DEFAULT_REPLY = "Here's the ticket I prepared — add your name and email to submit it.";
+const BOOKING_DEFAULT_REPLY = "Tap Book a call below to pick a time (Monday to Friday, 9 AM to 10 PM Eastern).";
 const REFUSAL_REPLY = "Sorry, I can't help with that here. Let me connect you with a team member.";
 
 export function validateChatRequest(
@@ -88,8 +90,9 @@ export function parseChatResult(
     content: Array<{ type: string; text?: string; name?: string; input?: unknown }>;
   },
   teamKeys: string[] = [],
-): { reply: string; handoff: boolean; ticketDraft?: TicketDraft; handoffTeam?: string } {
+): { reply: string; handoff: boolean; ticketDraft?: TicketDraft; handoffTeam?: string; booking?: true } {
   if (resp.stop_reason === "refusal") return { reply: REFUSAL_REPLY, handoff: true };
+  const booking = resp.content.some((b) => b.type === "tool_use" && b.name === BOOKING_TOOL_NAME) ? { booking: true as const } : {};
 
   const text = resp.content
     .filter((b) => b.type === "text" && b.text)
@@ -104,9 +107,9 @@ export function parseChatResult(
   const ticketCall = resp.content.find((b) => b.type === "tool_use" && b.name === TICKET_TOOL_NAME);
   const ticketDraft = ticketCall ? validateTicketDraft(ticketCall.input, teamKeys) : null;
 
-  if (ticketDraft && !handoff) return { reply: text || TICKET_DEFAULT_REPLY, handoff: false, ticketDraft };
-  const reply = text || (handoff ? HANDOFF_DEFAULT_REPLY : "");
-  return handoffTeam ? { reply, handoff, handoffTeam } : { reply, handoff };
+  if (ticketDraft && !handoff) return { reply: text || TICKET_DEFAULT_REPLY, handoff: false, ticketDraft, ...booking };
+  const reply = text || (handoff ? HANDOFF_DEFAULT_REPLY : booking.booking ? BOOKING_DEFAULT_REPLY : "");
+  return handoffTeam ? { reply, handoff, handoffTeam, ...booking } : { reply, handoff, ...booking };
 }
 
 /**

@@ -54,6 +54,13 @@ describe("parseChatResult", () => {
     });
   });
 
+  it("flags booking when Claude calls offer_booking_call, with a default reply", () => {
+    expect(
+      parseChatResult({ stop_reason: "tool_use", content: [{ type: "text", text: "Sure!" }, { type: "tool_use", name: "offer_booking_call" }] }),
+    ).toEqual({ reply: "Sure!", handoff: false, booking: true });
+    expect(parseChatResult({ stop_reason: "tool_use", content: [{ type: "tool_use", name: "offer_booking_call" }] }).reply).toMatch(/Book a call/);
+  });
+
   it("flags handoff when Claude calls request_human_agent", () => {
     expect(
       parseChatResult({

@@ -219,6 +219,14 @@ describe("SupportChatWidget", () => {
     expect(sent[sent.length - 1].content).toBe("My ticket number is 1A2B3C4D");
   });
 
+  it("shows Book a call when the AI offers a call", async () => {
+    chat.sendAiMessage.mockResolvedValue({ reply: "Pick a time below.", handoff: false, bookingUrl: "https://cal.example/book" });
+    render(<SupportChatWidget organizationId="org-1" embedded />);
+    fireEvent.change(screen.getByPlaceholderText("Type a message…"), { target: { value: "I want to book a call" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    expect(await screen.findByRole("link", { name: /Book a call/ })).toHaveAttribute("href", "https://cal.example/book");
+  });
+
   it("no Book a call button for closed tickets", async () => {
     chat.sendAiMessage.mockResolvedValue({ reply: "It's resolved.", handoff: false, trackedTicket: { ref: "1A2B3C4D", status: "Closed" } });
     render(<SupportChatWidget organizationId="org-1" orgSlug="hv" embedded />);

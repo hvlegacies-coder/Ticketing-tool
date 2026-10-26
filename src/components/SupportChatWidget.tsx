@@ -101,7 +101,7 @@ export function SupportChatWidget({ organizationId, orgName, orgSlug, embedded =
     setPendingPhoto(null);
     setIsLoading(true);
     const result = await sendAiMessage(organizationId, next);
-    const bookingUrl = result.trackedTicket?.bookingUrl;
+    const bookingUrl = result.bookingUrl ?? result.trackedTicket?.bookingUrl;
     setMessages((prev) => [...prev, { role: "assistant", content: result.reply, ...(bookingUrl ? { bookingUrl } : {}) }]);
     if (result.handoff) {
       setShowHandoff(true);
