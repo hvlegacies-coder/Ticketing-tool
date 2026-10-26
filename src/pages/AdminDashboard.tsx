@@ -37,6 +37,7 @@ const AdminDashboard = () => {
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterTag, setFilterTag] = useState("all");
   const [filterSla, setFilterSla] = useState("all");
+  const [filterTeam, setFilterTeam] = useState("all");
   const [mineOnly, setMineOnly] = useState(false);
 
   const orgId = organization?.id;
@@ -68,6 +69,17 @@ const AdminDashboard = () => {
     enabled: !!orgId,
   });
 
+  const { data: routingTeams = [] } = useQuery({
+    queryKey: ["routing-teams", orgId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("routing_teams").select("key, name").eq("organization_id", orgId!).order("sort");
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!orgId,
+  });
+  const teamNames = Object.fromEntries(routingTeams.map((t) => [t.key, t.name]));
+
   const { data: tags = [] } = useQuery({
     queryKey: ["org-tags", orgId],
     queryFn: async () => {
@@ -94,6 +106,7 @@ const AdminDashboard = () => {
       if (filterPriority !== "all" && t.priority !== filterPriority) return false;
       if (filterStatus !== "all" && t.status !== filterStatus) return false;
       if (filterTag !== "all" && !t.ticket_tags?.some((tt) => tt.tags?.id === filterTag)) return false;
+      if (filterTeam !== "all" && t.team_key !== filterTeam) return false;
       if (mineOnly && t.assigned_to_user_id !== user?.id) return false;
       if (filterSla !== "all") {
         const isDone = t.status === "Resolved" || t.status === "Closed";
@@ -102,7 +115,7 @@ const AdminDashboard = () => {
       }
       return true;
     });
-  }, [tickets, search, filterCategory, filterPriority, filterStatus, filterTag, filterSla, mineOnly, user?.id]);
+  }, [tickets, search, filterCategory, filterPriority, filterStatus, filterTag, filterSla, filterTeam, mineOnly, user?.id]);
 
   const stats = {
     total: tickets.length,
@@ -197,6 +210,17 @@ const AdminDashboard = () => {
               ))}
             </SelectContent>
           </Select>
+          <Select value={filterTeam} onValueChange={setFilterTeam}>
+            <SelectTrigger className="w-[170px]" aria-label="Filter by team">
+              <SelectValue placeholder="Team" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Teams</SelectItem>
+              {routingTeams.map((t) => (
+                <SelectItem key={t.key} value={t.key}>{t.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select value={filterSla} onValueChange={setFilterSla}>
             <SelectTrigger className="w-[140px]">
               <SelectValue placeholder="SLA" />
@@ -226,6 +250,7 @@ const AdminDashboard = () => {
           members={members}
           canAssign={role === "owner" || role === "admin" || role === "agent"}
           onAssigned={() => queryClient.invalidateQueries({ queryKey: ["tickets", orgId] })}
+          teamNames={teamNames}
         />
       </div>
     </AppShell>

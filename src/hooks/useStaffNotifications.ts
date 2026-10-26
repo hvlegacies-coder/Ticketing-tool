@@ -39,6 +39,13 @@ export function mergeNotifications(waiting: WaitingTicket[], unread: UnreadMessa
   return items.sort((a, b) => (a.at < b.at ? 1 : -1));
 }
 
+/** Realtime UPDATEs carry only the new row, so "just ended" = ended within the last 30s. */
+export function chatJustEnded(chatEndedAt: string | null | undefined, now = new Date()): boolean {
+  if (!chatEndedAt) return false;
+  const age = now.getTime() - new Date(chatEndedAt).getTime();
+  return age >= 0 && age < 30_000;
+}
+
 function playChime() {
   try {
     void new Audio("/notify.wav").play().catch(() => {});
@@ -118,7 +125,11 @@ export function useStaffNotifications(
         (payload) => {
           // payload.old only carries the primary key (default replica identity),
           // so "newly waiting" = has agent_requested_at and isn't in our cache yet.
-          const next = payload.new as Partial<WaitingTicket>;
+          const next = payload.new as Partial<WaitingTicket> & { chat_ended_at?: string | null };
+          if (next.id) queryClient.invalidateQueries({ queryKey: ["ticket", next.id] });
+          if (chatJustEnded(next.chat_ended_at)) {
+            toast.info(`${next.client_full_name ?? "A customer"} ended the chat`, { description: "No reply needed." });
+          }
           const known = queryClient.getQueryData<WaitingTicket[]>(["staff-waiting", orgId]) ?? [];
           if (next?.agent_requested_at && !known.some((t) => t.id === next.id)) {
             toast.info(`${next.client_full_name ?? "A customer"} wants to talk to an agent`);

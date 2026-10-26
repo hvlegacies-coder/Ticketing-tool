@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mergeNotifications } from "./useStaffNotifications";
+import { chatJustEnded, mergeNotifications } from "./useStaffNotifications";
 
 const waitingT1 = { id: "t1", client_full_name: "Ann", issue_title: "Live chat request", agent_requested_at: "2026-10-20T10:00:00Z" };
 const unreadOnT1 = { id: "m1", ticket_id: "t1", sender_name: "Ann", message: "hello?", created_at: "2026-10-20T10:01:00Z" };
@@ -23,5 +23,22 @@ describe("mergeNotifications", () => {
     expect(mergeNotifications([], [older, unreadOnT2])).toEqual([
       { kind: "client_message", ticketId: "t2", customerName: "Bob", preview: "any update", at: "2026-10-20T10:05:00Z" },
     ]);
+  });
+});
+
+describe("chatJustEnded", () => {
+  const now = new Date("2026-10-26T12:00:00Z");
+
+  it("is true for a chat ended in the last 30 seconds", () => {
+    expect(chatJustEnded("2026-10-26T11:59:45Z", now)).toBe(true);
+  });
+
+  it("is false for an older end, so unrelated ticket edits don't re-toast", () => {
+    expect(chatJustEnded("2026-10-26T11:58:00Z", now)).toBe(false);
+  });
+
+  it("is false when the chat is open", () => {
+    expect(chatJustEnded(null, now)).toBe(false);
+    expect(chatJustEnded(undefined, now)).toBe(false);
   });
 });

@@ -335,6 +335,12 @@ const TicketDetails = () => {
                   <MessageSquare className="h-4 w-4 text-primary-foreground" />
                   <h3 className="font-display font-semibold text-primary-foreground">Messages</h3>
                 </div>
+                {ticket.chat_ended_at && (
+                  <div role="status" className="border-b border-[#f5c84c]/40 bg-[#f5c84c]/10 px-4 py-2.5 text-sm">
+                    <strong>Customer ended the chat</strong> at {format(new Date(ticket.chat_ended_at), "MMM d, h:mm a")} — no reply
+                    needed. If they write again, the chat reopens and you'll be notified.
+                  </div>
+                )}
                 <TicketMessages
                   ticketId={ticket.id}
                   senderType="support"

@@ -17,13 +17,14 @@ serve(async (req) => {
       ticket_id: string;
       message_id: string | null;
     };
-    if ((event !== "agent_requested" && event !== "client_message") || !ticket_id) return reply(400);
+    const EVENTS: WebhookEvent[] = ["agent_requested", "client_message", "chat_ended"];
+    if (!EVENTS.includes(event) || !ticket_id) return reply(400);
 
     const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
     const { data: ticket } = await db
       .from("tickets")
-      .select("id, organization_id, client_full_name, email, client_access_token, organizations(id, slug, name)")
+      .select("id, organization_id, client_full_name, email, client_access_token, team_key, assigned_to_user_id, organizations(id, slug, name)")
       .eq("id", ticket_id)
       .maybeSingle();
     if (!ticket) return reply(204);
@@ -36,7 +37,7 @@ serve(async (req) => {
     const url = integration?.ghl_webhook_url ?? null;
     if (!isValidWebhookUrl(url)) return reply(204);
 
-    let message = "Customer requested a live agent.";
+    let message = event === "chat_ended" ? "Customer ended the chat." : "Customer requested a live agent.";
     let createdAt = new Date().toISOString();
     if (message_id) {
       const { data: msg } = await db
@@ -52,6 +53,13 @@ serve(async (req) => {
     }
 
     const org = ticket.organizations as unknown as { id: string; slug: string; name: string };
+
+    const { data: team } = ticket.team_key
+      ? await db.from("routing_teams").select("key, name").eq("organization_id", ticket.organization_id).eq("key", ticket.team_key).maybeSingle()
+      : { data: null };
+    const { data: assignee } = ticket.assigned_to_user_id
+      ? await db.from("profiles").select("full_name, email").eq("id", ticket.assigned_to_user_id).maybeSingle()
+      : { data: null };
     const payload = buildWebhookPayload({
       event,
       org,
@@ -59,6 +67,8 @@ serve(async (req) => {
       message,
       createdAt,
       appUrl: Deno.env.get("PUBLIC_APP_URL") ?? "",
+      team,
+      assignedTo: assignee ? { name: assignee.full_name, email: assignee.email } : null,
     });
 
     const res = await fetch(url!, {

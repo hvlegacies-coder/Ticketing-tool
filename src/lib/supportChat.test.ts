@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { invoke, insert } = vi.hoisted(() => ({ invoke: vi.fn(), insert: vi.fn() }));
+const { invoke, insert, rpc } = vi.hoisted(() => ({ invoke: vi.fn(), insert: vi.fn(), rpc: vi.fn() }));
 vi.mock("@/integrations/supabase/client", () => ({
-  supabase: { functions: { invoke }, from: () => ({ insert }) },
+  supabase: { functions: { invoke }, from: () => ({ insert }), rpc },
 }));
 
 import {
@@ -11,6 +11,7 @@ import {
   clearLiveSession,
   createHandoffTicket,
   createTicketFromChat,
+  endChatByToken,
   fitDimensions,
   loadLiveSession,
   saveLiveSession,
@@ -243,5 +244,44 @@ describe("confirmation email portal link", () => {
     invoke.mockResolvedValue({ data: {}, error: null });
     await createTicketFromChat({ organizationId: "o", name: "Ann", email: "a@x.com", company: "", draft, turns: [] });
     expect(invoke.mock.calls[0][1].body.portalUrl).toBeUndefined();
+  });
+});
+
+describe("routing and end chat", () => {
+  const draft = {
+    title: "T",
+    category: "Other",
+    priority: "Moderate (single user or workaround available)",
+    summary: "S",
+  };
+
+  it("passes the AI's handoff team through", async () => {
+    invoke.mockResolvedValue({ data: { reply: "ok", handoff: true, handoffTeam: "appointments" }, error: null });
+    expect((await sendAiMessage("org", [])).handoffTeam).toBe("appointments");
+  });
+
+  it("saves the draft's team on the ticket", async () => {
+    insert.mockResolvedValue({ error: null });
+    invoke.mockResolvedValue({ data: {}, error: null });
+    await createTicketFromChat({ organizationId: "o", name: "A", email: "a@x.com", company: "", draft: { ...draft, team: "ghl" }, turns: [] });
+    expect(insert.mock.calls.at(-1)![0].team_key).toBe("ghl");
+  });
+
+  it("saves the handoff team on the live-chat ticket", async () => {
+    insert.mockResolvedValue({ error: null });
+    invoke.mockResolvedValue({ data: {}, error: null });
+    await createHandoffTicket({ organizationId: "o", name: "A", email: "a@x.com", turns: [], teamKey: "apps" });
+    expect(insert.mock.calls.at(-1)![0].team_key).toBe("apps");
+  });
+
+  it("ends the chat through the token RPC", async () => {
+    rpc.mockResolvedValue({ data: true, error: null });
+    await expect(endChatByToken("tok")).resolves.toBe(true);
+    expect(rpc).toHaveBeenCalledWith("end_chat_by_token", { _token: "tok" });
+  });
+
+  it("reports failure when ending the chat errors", async () => {
+    rpc.mockResolvedValue({ data: null, error: { message: "down" } });
+    await expect(endChatByToken("tok")).resolves.toBe(false);
   });
 });

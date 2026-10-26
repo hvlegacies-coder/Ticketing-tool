@@ -4,6 +4,8 @@ import Anthropic from "npm:@anthropic-ai/sdk";
 import {
   HANDOFF_TOOL_NAME,
   TICKET_TOOL_NAME,
+  type RoutingTeam,
+  buildTeamGuide,
   extractApiKey,
   parseChatResult,
   rateLimitKey,
@@ -167,35 +169,54 @@ const TICKET_INSTRUCTION = `
 
 This chat replaces the ticket form. When the issue needs follow-up from our team (an account problem, a refund or filing question you can't answer, a bug, a document problem), or the customer asks to open a ticket, call ${TICKET_TOOL_NAME} with a clear title, the best-fitting category, a priority, and a summary of everything learned so far (including your description of any photos, without sensitive numbers). Don't ask for their name or email — the form after your call collects them. Prefer ${TICKET_TOOL_NAME} for issues that can wait; use ${HANDOFF_TOOL_NAME} only when they want to talk to a person now.`;
 
-const createTicketTool = {
-  name: TICKET_TOOL_NAME,
-  description: "Prepare a support ticket for the customer to confirm and submit.",
-  strict: true,
-  input_schema: {
-    type: "object" as const,
-    properties: {
-      title: { type: "string", description: "Short summary, under 100 characters." },
-      category: { type: "string", enum: [...TICKET_CATEGORIES] },
-      priority: { type: "string", enum: [...TICKET_PRIORITIES] },
-      summary: { type: "string", description: "Everything the team needs to act, in plain sentences." },
-    },
-    required: ["title", "category", "priority", "summary"],
-    additionalProperties: false,
-  },
-};
+// Team is required (strict mode) whenever the org has routing teams.
+function teamProperty(teamKeys: string[]) {
+  return teamKeys.length
+    ? { team: { type: "string", enum: teamKeys, description: "Which team should handle this (see the team list)." } }
+    : {};
+}
 
-const requestHumanAgentTool = {
-  name: HANDOFF_TOOL_NAME,
-  description:
-    "Connect the customer with a human support agent. Use when the customer asks for a person or you cannot resolve the issue.",
-  strict: true,
-  input_schema: {
-    type: "object" as const,
-    properties: { reason: { type: "string", description: "Why the customer needs a human." } },
-    required: ["reason"],
-    additionalProperties: false,
-  },
-};
+function createTicketTool(teamKeys: string[]) {
+  return {
+    name: TICKET_TOOL_NAME,
+    description: "Prepare a support ticket for the customer to confirm and submit.",
+    strict: true,
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        title: { type: "string", description: "Short summary, under 100 characters." },
+        category: { type: "string", enum: [...TICKET_CATEGORIES] },
+        priority: { type: "string", enum: [...TICKET_PRIORITIES] },
+        summary: { type: "string", description: "Everything the team needs to act, in plain sentences." },
+        ...teamProperty(teamKeys),
+      },
+      required: ["title", "category", "priority", "summary", ...(teamKeys.length ? ["team"] : [])],
+      additionalProperties: false,
+    },
+  };
+}
+
+function requestHumanAgentTool(teamKeys: string[]) {
+  return {
+    name: HANDOFF_TOOL_NAME,
+    description:
+      "Connect the customer with a human support agent. Use when the customer asks for a person or you cannot resolve the issue.",
+    strict: true,
+    input_schema: {
+      type: "object" as const,
+      properties: { reason: { type: "string", description: "Why the customer needs a human." }, ...teamProperty(teamKeys) },
+      required: ["reason", ...(teamKeys.length ? ["team"] : [])],
+      additionalProperties: false,
+    },
+  };
+}
+
+function teamInstruction(teams: RoutingTeam[]): string {
+  const guide = buildTeamGuide(teams);
+  return guide
+    ? `\n\nEvery ticket and agent handoff goes to one team. Pick the team whose description best matches the customer's problem:\n${guide}`
+    : "";
+}
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -261,6 +282,14 @@ serve(async (req) => {
     systemPrompt = integration.ai_system_prompt_override;
   }
 
+  const { data: teamRows } = await supabaseAdmin
+    .from("routing_teams")
+    .select("key, name, description")
+    .eq("organization_id", parsed.organizationId)
+    .order("sort");
+  const teams = (teamRows ?? []) as RoutingTeam[];
+  const teamKeys = teams.map((t) => t.key);
+
   const messages = toApiMessages(parsed.messages);
   if (messages.length === 0) return json({ error: "invalid_body" }, 400);
 
@@ -275,15 +304,15 @@ serve(async (req) => {
       system: [
         {
           type: "text",
-          text: [systemPrompt, knowledgeBlock(), HANDOFF_INSTRUCTION + TICKET_INSTRUCTION].join("\n\n"),
+          text: [systemPrompt, knowledgeBlock(), HANDOFF_INSTRUCTION + TICKET_INSTRUCTION + teamInstruction(teams)].join("\n\n"),
           cache_control: { type: "ephemeral" },
         },
       ],
-      tools: [requestHumanAgentTool, createTicketTool],
+      tools: [requestHumanAgentTool(teamKeys), createTicketTool(teamKeys)],
       tool_choice: { type: "auto" },
       messages,
     });
-    return json(parseChatResult(response));
+    return json(parseChatResult(response, teamKeys));
   } catch (error: unknown) {
     if (error instanceof Anthropic.APIError) {
       console.error("support-chat Claude API error:", error.status, error.message);

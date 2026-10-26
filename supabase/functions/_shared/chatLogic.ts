@@ -21,7 +21,14 @@ export const MAX_IMAGE_BASE64 = 7_000_000;
 export const HANDOFF_TOOL_NAME = "request_human_agent";
 export const TICKET_TOOL_NAME = "create_ticket";
 
-export type TicketDraft = { title: string; category: string; priority: string; summary: string };
+export type TicketDraft = { title: string; category: string; priority: string; summary: string; team?: string };
+export type RoutingTeam = { key: string; name: string; description: string };
+
+/** One line per team for the system prompt ("key = Name: description"). */
+export function buildTeamGuide(teams: RoutingTeam[]): string {
+  if (teams.length === 0) return "";
+  return teams.map((t) => `- ${t.key} = ${t.name}: ${t.description}`).join("\n");
+}
 export const PHOTO_PLACEHOLDER = "[customer shared a photo]";
 
 const HANDOFF_DEFAULT_REPLY = "Sure — I'll connect you with a team member.";
@@ -63,7 +70,7 @@ export function validateChatRequest(
 }
 
 /** Normalizes the create_ticket tool input; null when title or summary is missing. */
-export function validateTicketDraft(input: unknown): TicketDraft | null {
+export function validateTicketDraft(input: unknown, teamKeys: string[] = []): TicketDraft | null {
   const d = (input ?? {}) as Record<string, unknown>;
   const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
   const title = str(d.title).slice(0, 140);
@@ -71,13 +78,17 @@ export function validateTicketDraft(input: unknown): TicketDraft | null {
   if (!title || !summary) return null;
   const category = (TICKET_CATEGORIES as readonly string[]).includes(str(d.category)) ? str(d.category) : "Other";
   const priority = (TICKET_PRIORITIES as readonly string[]).includes(str(d.priority)) ? str(d.priority) : DEFAULT_PRIORITY;
-  return { title, category, priority, summary };
+  const team = str(d.team);
+  return teamKeys.includes(team) ? { title, category, priority, summary, team } : { title, category, priority, summary };
 }
 
-export function parseChatResult(resp: {
-  stop_reason: string;
-  content: Array<{ type: string; text?: string; name?: string; input?: unknown }>;
-}): { reply: string; handoff: boolean; ticketDraft?: TicketDraft } {
+export function parseChatResult(
+  resp: {
+    stop_reason: string;
+    content: Array<{ type: string; text?: string; name?: string; input?: unknown }>;
+  },
+  teamKeys: string[] = [],
+): { reply: string; handoff: boolean; ticketDraft?: TicketDraft; handoffTeam?: string } {
   if (resp.stop_reason === "refusal") return { reply: REFUSAL_REPLY, handoff: true };
 
   const text = resp.content
@@ -85,13 +96,17 @@ export function parseChatResult(resp: {
     .map((b) => b.text)
     .join("\n")
     .trim();
-  const handoff = resp.content.some((b) => b.type === "tool_use" && b.name === HANDOFF_TOOL_NAME);
+  const handoffCall = resp.content.find((b) => b.type === "tool_use" && b.name === HANDOFF_TOOL_NAME);
+  const handoff = !!handoffCall;
+  const handoffTeamRaw = (handoffCall?.input as { team?: unknown } | undefined)?.team;
+  const handoffTeam = typeof handoffTeamRaw === "string" && teamKeys.includes(handoffTeamRaw) ? handoffTeamRaw : undefined;
 
   const ticketCall = resp.content.find((b) => b.type === "tool_use" && b.name === TICKET_TOOL_NAME);
-  const ticketDraft = ticketCall ? validateTicketDraft(ticketCall.input) : null;
+  const ticketDraft = ticketCall ? validateTicketDraft(ticketCall.input, teamKeys) : null;
 
   if (ticketDraft && !handoff) return { reply: text || TICKET_DEFAULT_REPLY, handoff: false, ticketDraft };
-  return { reply: text || (handoff ? HANDOFF_DEFAULT_REPLY : ""), handoff };
+  const reply = text || (handoff ? HANDOFF_DEFAULT_REPLY : "");
+  return handoffTeam ? { reply, handoff, handoffTeam } : { reply, handoff };
 }
 
 /**

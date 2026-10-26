@@ -638,9 +638,31 @@ export type Database = {
           },
         ]
       }
+      routing_teams: {
+        Row: { created_at: string; description: string; id: string; key: string; name: string; organization_id: string; sort: number }
+        Insert: { created_at?: string; description?: string; id?: string; key: string; name: string; organization_id: string; sort?: number }
+        Update: { created_at?: string; description?: string; id?: string; key?: string; name?: string; organization_id?: string; sort?: number }
+        Relationships: []
+      }
+      routing_team_members: {
+        Row: { created_at: string; team_id: string; user_id: string }
+        Insert: { created_at?: string; team_id: string; user_id: string }
+        Update: { created_at?: string; team_id?: string; user_id?: string }
+        Relationships: [
+          {
+            foreignKeyName: "routing_team_members_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "routing_teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tickets: {
         Row: {
           agent_requested_at: string | null
+          chat_ended_at: string | null
+          team_key: string | null
           affected_system: string | null
           assigned_to: string | null
           assigned_to_user_id: string | null
@@ -677,6 +699,8 @@ export type Database = {
         }
         Insert: {
           agent_requested_at?: string | null
+          chat_ended_at?: string | null
+          team_key?: string | null
           affected_system?: string | null
           assigned_to?: string | null
           assigned_to_user_id?: string | null
@@ -713,6 +737,8 @@ export type Database = {
         }
         Update: {
           agent_requested_at?: string | null
+          chat_ended_at?: string | null
+          team_key?: string | null
           affected_system?: string | null
           assigned_to?: string | null
           assigned_to_user_id?: string | null
@@ -776,6 +802,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      end_chat_by_token: {
+        Args: { _token: string }
+        Returns: boolean
+      }
       track_ticket: {
         Args: { _slug: string; _ticket_ref: string }
         Returns: { ticket_ref: string; status: string; created_at: string; updated_at: string; team_replied: boolean }[]

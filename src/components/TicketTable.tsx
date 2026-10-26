@@ -43,9 +43,11 @@ interface TicketTableProps {
   members?: OrgMember[];
   canAssign?: boolean;
   onAssigned?: () => void;
+  /** Routing team key -> display name, for the team label on each row. */
+  teamNames?: Record<string, string>;
 }
 
-export function TicketTable({ tickets, isLoading, orgSlug, members = [], canAssign, onAssigned }: TicketTableProps) {
+export function TicketTable({ tickets, isLoading, orgSlug, members = [], canAssign, onAssigned, teamNames = {} }: TicketTableProps) {
   const handleAssign = async (ticketId: string, userId: string) => {
     const { error } = await supabase
       .from("tickets")
@@ -121,6 +123,11 @@ export function TicketTable({ tickets, isLoading, orgSlug, members = [], canAssi
                 </TableCell>
                 <TableCell className="max-w-[200px]">
                   <p className="truncate text-sm font-medium">{ticket.issue_title}</p>
+                  {ticket.team_key && teamNames[ticket.team_key] && (
+                    <span className="mt-1 inline-block rounded-full border border-violet/40 bg-violet/10 px-2 py-0.5 text-[10px] text-violet">
+                      {teamNames[ticket.team_key]}
+                    </span>
+                  )}
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-1 max-w-[140px]">

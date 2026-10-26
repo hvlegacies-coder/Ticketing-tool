@@ -42,6 +42,7 @@ Use a **dedicated** project — never one that already hosts another app
    psql "<DB_URL>" -v ON_ERROR_STOP=1 -f supabase/tests/live_chat_suggestions_checks.sql
    psql "<DB_URL>" -v ON_ERROR_STOP=1 -f supabase/tests/suggestions_v2_checks.sql
    psql "<DB_URL>" -v ON_ERROR_STOP=1 -f supabase/tests/track_ticket_checks.sql
+   psql "<DB_URL>" -v ON_ERROR_STOP=1 -f supabase/tests/routing_end_chat_checks.sql
    ```
 8. Sign up, create your organization, then run the end-to-end check:
    ```sh

@@ -9,6 +9,7 @@ const chat = vi.hoisted(() => ({
   clearLiveSession: vi.fn(),
   shrinkImage: vi.fn(),
   createTicketFromChat: vi.fn(),
+  endChatByToken: vi.fn(),
 }));
 vi.mock("@/lib/supportChat", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/supportChat")>()),
@@ -261,5 +262,40 @@ describe("SupportChatWidget", () => {
   it("no longer offers Track refund", () => {
     render(<SupportChatWidget organizationId="org-1" embedded />);
     expect(screen.queryByRole("button", { name: "Track refund" })).not.toBeInTheDocument();
+  });
+
+  it("sends the AI's chosen team with the live-agent handoff", async () => {
+    chat.sendAiMessage.mockResolvedValue({ reply: "Connecting you", handoff: true, handoffTeam: "appointments" });
+    chat.createHandoffTicket.mockResolvedValue({ ticketId: "abcd1234-0000", token: "tok" });
+    render(<SupportChatWidget organizationId="org-1" embedded />);
+    fireEvent.change(screen.getByPlaceholderText("Type a message…"), { target: { value: "reschedule please" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await screen.findByText("Connecting you");
+    fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Ann" } });
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "ann@x.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "Connect me" }));
+    await waitFor(() => expect(chat.createHandoffTicket).toHaveBeenCalledWith(expect.objectContaining({ teamKey: "appointments" })));
+  });
+
+  it("asks before ending the chat, then tells the agent side", async () => {
+    chat.loadLiveSession.mockReturnValue({ ticketId: "abcd1234-0000", token: "tok", name: "Ann", email: "ann@x.com" });
+    chat.endChatByToken.mockResolvedValue(true);
+    render(<SupportChatWidget organizationId="org-1" embedded />);
+    fireEvent.click(screen.getByRole("button", { name: "End chat" }));
+    expect(screen.getByText("End this chat? Our team will be notified.")).toBeInTheDocument();
+    expect(chat.endChatByToken).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Yes, end chat" }));
+    await waitFor(() => expect(chat.endChatByToken).toHaveBeenCalledWith("tok"));
+    expect(chat.clearLiveSession).toHaveBeenCalledWith("org-1");
+    expect(await screen.findByText(GREETING)).toBeInTheDocument();
+  });
+
+  it("keeps the chat open when ending is cancelled", () => {
+    chat.loadLiveSession.mockReturnValue({ ticketId: "abcd1234-0000", token: "tok", name: "Ann", email: "ann@x.com" });
+    render(<SupportChatWidget organizationId="org-1" embedded />);
+    fireEvent.click(screen.getByRole("button", { name: "End chat" }));
+    fireEvent.click(screen.getByRole("button", { name: "Keep chatting" }));
+    expect(chat.endChatByToken).not.toHaveBeenCalled();
+    expect(screen.getByTestId("live-thread")).toBeInTheDocument();
   });
 });

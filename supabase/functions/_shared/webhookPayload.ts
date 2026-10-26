@@ -1,7 +1,7 @@
 // Pure GoHighLevel webhook helpers (no Deno APIs) so Vitest can test them.
 import { appUrl } from "./appUrl.ts";
 
-export type WebhookEvent = "agent_requested" | "client_message";
+export type WebhookEvent = "agent_requested" | "client_message" | "chat_ended";
 
 export type GhlPayload = {
   event: WebhookEvent;
@@ -13,6 +13,8 @@ export type GhlPayload = {
   chat_url: string;
   admin_url: string;
   created_at: string;
+  team: { key: string; name: string } | null;
+  assigned_to: { name: string | null; email: string | null } | null;
 };
 
 export function buildWebhookPayload(input: {
@@ -22,6 +24,8 @@ export function buildWebhookPayload(input: {
   message: string;
   createdAt: string;
   appUrl: string;
+  team?: { key: string; name: string } | null;
+  assignedTo?: { name: string | null; email: string | null } | null;
 }): GhlPayload {
   return {
     event: input.event,
@@ -33,6 +37,8 @@ export function buildWebhookPayload(input: {
     chat_url: appUrl(`/t/${input.ticket.client_access_token}`, input.appUrl),
     admin_url: appUrl(`/app/${input.org.slug}/ticket/${input.ticket.id}`, input.appUrl),
     created_at: input.createdAt,
+    team: input.team ?? null,
+    assigned_to: input.assignedTo ?? null,
   };
 }
 

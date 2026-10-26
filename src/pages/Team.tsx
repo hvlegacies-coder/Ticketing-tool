@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { UserPlus, Loader2, Trash2, Mail, Clock } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
+import { RoutingTeams } from "@/components/RoutingTeams";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -267,6 +268,12 @@ const Team = () => {
             </div>
           )}
         </div>
+
+        <RoutingTeams
+          orgId={orgId}
+          members={members as never}
+          canManage={myRole === "owner" || myRole === "admin"}
+        />
       </div>
     </AppShell>
   );

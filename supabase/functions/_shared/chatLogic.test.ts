@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   MAX_IMAGE_BASE64,
+  buildTeamGuide,
   extractApiKey,
   parseChatResult,
   rateLimitKey,
@@ -227,5 +228,56 @@ describe("extractApiKey", () => {
 
   it("returns an empty string when unset", () => {
     expect(extractApiKey(undefined)).toBe("");
+  });
+});
+
+describe("team routing", () => {
+  const teams = ["ghl", "apps", "internal", "appointments"];
+  const base = {
+    title: "Calendar not syncing",
+    category: "Software/Application",
+    priority: "Moderate (single user or workaround available)",
+    summary: "GHL calendar stopped syncing.",
+  };
+
+  it("keeps a known team on the ticket draft", () => {
+    expect(validateTicketDraft({ ...base, team: "ghl" }, teams)).toEqual({ ...base, team: "ghl" });
+  });
+
+  it("drops an unknown team", () => {
+    expect(validateTicketDraft({ ...base, team: "sales" }, teams)).toEqual(base);
+  });
+
+  it("returns the team chosen for a handoff", () => {
+    expect(
+      parseChatResult(
+        { stop_reason: "tool_use", content: [{ type: "tool_use", name: "request_human_agent", input: { reason: "x", team: "appointments" } }] },
+        teams,
+      ),
+    ).toEqual({ reply: "Sure — I'll connect you with a team member.", handoff: true, handoffTeam: "appointments" });
+  });
+
+  it("ignores a handoff team that isn't configured", () => {
+    expect(
+      parseChatResult(
+        { stop_reason: "tool_use", content: [{ type: "tool_use", name: "request_human_agent", input: { reason: "x", team: "nope" } }] },
+        teams,
+      ).handoffTeam,
+    ).toBeUndefined();
+  });
+});
+
+describe("buildTeamGuide", () => {
+  it("lists each team's key, name and description for the AI", () => {
+    const guide = buildTeamGuide([
+      { key: "ghl", name: "GoHighLevel", description: "Anything GHL." },
+      { key: "apps", name: "Apps", description: "Our apps." },
+    ]);
+    expect(guide).toContain("ghl = GoHighLevel: Anything GHL.");
+    expect(guide).toContain("apps = Apps: Our apps.");
+  });
+
+  it("is empty when the org has no teams", () => {
+    expect(buildTeamGuide([])).toBe("");
   });
 });

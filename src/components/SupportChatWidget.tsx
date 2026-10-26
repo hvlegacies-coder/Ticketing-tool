@@ -22,6 +22,7 @@ import {
   clearLiveSession,
   createHandoffTicket,
   createTicketFromChat,
+  endChatByToken,
   loadLiveSession,
   saveLiveSession,
   sendAiMessage,
@@ -54,6 +55,8 @@ export function SupportChatWidget({ organizationId, orgName, orgSlug, embedded =
   const [showMessageForm, setShowMessageForm] = useState(false);
   const [showTracker, setShowTracker] = useState(false);
   const [checking, setChecking] = useState(false);
+  const [handoffTeam, setHandoffTeam] = useState<string | undefined>(undefined);
+  const [confirmEnd, setConfirmEnd] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [agentName, setAgentName] = useState<string | null>(null);
   const submittingRef = useRef(false);
@@ -101,7 +104,10 @@ export function SupportChatWidget({ organizationId, orgName, orgSlug, embedded =
     setIsLoading(true);
     const result = await sendAiMessage(organizationId, next);
     setMessages((prev) => [...prev, { role: "assistant", content: result.reply }]);
-    if (result.handoff) setShowHandoff(true);
+    if (result.handoff) {
+      setShowHandoff(true);
+      setHandoffTeam(result.handoffTeam);
+    }
     if (result.ticketDraft) setTicketDraft(result.ticketDraft);
     if (result.aiDisabled || result.unavailable) setShowMessageForm(true);
     setIsLoading(false);
@@ -136,7 +142,7 @@ export function SupportChatWidget({ organizationId, orgName, orgSlug, embedded =
 
   const startLiveChat = (name: string, email: string) =>
     guarded(async () => {
-      const { ticketId, token } = await createHandoffTicket({ organizationId, orgName, name, email, turns: messages });
+      const { ticketId, token } = await createHandoffTicket({ organizationId, orgName, name, email, turns: messages, teamKey: handoffTeam });
       const session = { ticketId, token, name, email };
       saveLiveSession(organizationId, session);
       setLive(session);
@@ -201,7 +207,9 @@ export function SupportChatWidget({ organizationId, orgName, orgSlug, embedded =
     setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
   };
 
-  const endLiveChat = () => {
+  const endLiveChat = async () => {
+    if (live) await endChatByToken(live.token);
+    setConfirmEnd(false);
     clearLiveSession(organizationId);
     setLive(null);
     setAgentName(null);
@@ -247,10 +255,23 @@ export function SupportChatWidget({ organizationId, orgName, orgSlug, embedded =
             <a href={`/t/${live.token}`} className="truncate text-cyan underline-offset-2 hover:underline">
               Resume later: {window.location.origin}/t/{live.token.slice(0, 8)}…
             </a>
-            <button onClick={endLiveChat} className="shrink-0 hover:text-foreground">
+            <button onClick={() => setConfirmEnd(true)} className="shrink-0 hover:text-foreground">
               End chat
             </button>
           </div>
+          {confirmEnd && (
+            <div role="alertdialog" aria-label="End chat" className="flex flex-wrap items-center justify-between gap-2 border-t border-[#f5c84c]/40 bg-[#f5c84c]/10 px-4 py-2.5 text-sm">
+              <span>End this chat? Our team will be notified.</span>
+              <span className="flex gap-2">
+                <Button size="sm" variant="ghost" onClick={() => setConfirmEnd(false)}>
+                  Keep chatting
+                </Button>
+                <Button size="sm" onClick={() => void endLiveChat()} className="bg-gradient-gold text-primary-foreground">
+                  Yes, end chat
+                </Button>
+              </span>
+            </div>
+          )}
         </div>
       ) : (
         <>

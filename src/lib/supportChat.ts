@@ -18,11 +18,13 @@ function toWire(messages: ChatTurn[]) {
 }
 
 export type LiveSession = { ticketId: string; token: string; name: string; email: string };
-export type TicketDraft = { title: string; category: string; priority: string; summary: string };
+export type TicketDraft = { title: string; category: string; priority: string; summary: string; team?: string };
 export type AiResult = {
   reply: string;
   handoff: boolean;
   ticketDraft?: TicketDraft;
+  /** Routing team the AI picked for a live-agent handoff. */
+  handoffTeam?: string;
   /** The org turned AI chat off: show the fallback message form. */
   aiDisabled?: boolean;
   /** The AI couldn't be reached: show the fallback message form. */
@@ -51,6 +53,7 @@ export async function sendAiMessage(organizationId: string, messages: ChatTurn[]
       handoff: data.handoff === true,
       ...(data.ticketDraft ? { ticketDraft: data.ticketDraft as TicketDraft } : {}),
       ...(data.aiDisabled ? { aiDisabled: true } : {}),
+      ...(typeof data.handoffTeam === "string" ? { handoffTeam: data.handoffTeam } : {}),
     };
   } catch {
     return fallback;
@@ -120,6 +123,7 @@ export async function createHandoffTicket(input: {
   email: string;
   turns: ChatTurn[];
   orgName?: string;
+  teamKey?: string;
 }): Promise<{ ticketId: string; token: string }> {
   const title = "Live chat request";
   const ids = await insertTicket({
@@ -133,6 +137,7 @@ export async function createHandoffTicket(input: {
     issue_description: buildTranscript(input.turns) || "Customer requested a live agent.",
     chatbot_transcript: transcriptJson(input.turns),
     agent_requested_at: new Date().toISOString(),
+    team_key: input.teamKey ?? null,
   });
   await sendConfirmationEmail({ ...ids, email: input.email, name: input.name, title, priority: MODERATE_PRIORITY, category: "Live Chat", company: "—", orgName: input.orgName });
   return ids;
@@ -159,6 +164,7 @@ export async function createTicketFromChat(input: {
     priority: input.draft.priority,
     issue_description: input.draft.summary,
     chatbot_transcript: transcriptJson(input.turns),
+    team_key: input.draft.team ?? null,
   });
   await sendConfirmationEmail({
     ...ids,
@@ -221,4 +227,14 @@ export async function shrinkImage(file: File): Promise<ChatImage> {
   bitmap.close();
   const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
   return { media_type: "image/jpeg", data: dataUrl.split(",")[1], previewUrl: dataUrl };
+}
+
+/** Customer ended the live chat: tells the agent side so nobody keeps waiting. */
+export async function endChatByToken(token: string): Promise<boolean> {
+  try {
+    const { data, error } = await supabase.rpc("end_chat_by_token", { _token: token });
+    return !error && data === true;
+  } catch {
+    return false;
+  }
 }
