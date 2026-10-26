@@ -11,6 +11,7 @@ import {
   validateChatRequest,
 } from "../_shared/chatLogic.ts";
 import { TICKET_CATEGORIES, TICKET_PRIORITIES } from "../_shared/ticketOptions.ts";
+import { knowledgeBlock } from "../_shared/knowledge/taxPracticeKb.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -270,7 +271,14 @@ serve(async (req) => {
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
       output_config: { effort: "low" },
-      system: systemPrompt + HANDOFF_INSTRUCTION + TICKET_INSTRUCTION,
+      // Stable per org, so cache it: the TaxPractice handbook makes this prompt ~6k tokens.
+      system: [
+        {
+          type: "text",
+          text: [systemPrompt, knowledgeBlock(), HANDOFF_INSTRUCTION + TICKET_INSTRUCTION].join("\n\n"),
+          cache_control: { type: "ephemeral" },
+        },
+      ],
       tools: [requestHumanAgentTool, createTicketTool],
       tool_choice: { type: "auto" },
       messages,
