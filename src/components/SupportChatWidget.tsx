@@ -299,8 +299,11 @@ export function SupportChatWidget({ organizationId, orgName, orgSlug, embedded =
               <Camera className="h-3 w-3" /> Send a photo
             </button>
             {orgSlug && (
-              <button onClick={() => setShowTracker(true)} className={`${chip} border-cyan/40 text-cyan hover:bg-cyan/10`}>
-                <Search className="h-3 w-3" /> Track ticket
+              <button
+                onClick={() => setShowTracker(true)}
+                className="inline-flex items-center gap-1.5 rounded-full border-2 border-[#f5c84c] bg-[#f5c84c]/15 px-3.5 py-1.5 text-sm font-semibold text-gold glow-gold"
+              >
+                <Search className="h-4 w-4" /> Track ticket
               </button>
             )}
           </div>

@@ -27,12 +27,12 @@ export function TrackTicketCard({ checking, onLookup }: Props) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-2 rounded-xl border border-cyan/40 bg-navy/60 p-3">
-      <p className="inline-flex items-center gap-1 text-xs font-semibold text-cyan">
+    <form onSubmit={handleSubmit} className="space-y-3 rounded-xl border-2 border-[#f5c84c]/60 bg-navy/60 p-4">
+      <p className="inline-flex items-center gap-1.5 text-sm font-semibold text-cyan">
         <Search className="h-3.5 w-3.5" /> Track a ticket
       </p>
       <div className="space-y-1">
-        <Label htmlFor="track-ref" className="text-xs">Ticket number</Label>
+        <Label htmlFor="track-ref" className="text-sm font-semibold">Ticket number</Label>
         <Input
           id="track-ref"
           value={value}
@@ -40,11 +40,11 @@ export function TrackTicketCard({ checking, onLookup }: Props) {
           placeholder="e.g. 1A2B3C4D"
           maxLength={12}
           autoComplete="off"
-          className="h-8 font-numeric uppercase tracking-widest"
+          className="h-12 text-center font-numeric text-xl uppercase tracking-[0.25em]"
         />
       </div>
-      {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
-      <Button type="submit" disabled={checking} className="h-8 w-full bg-gradient-gold text-primary-foreground">
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      <Button type="submit" disabled={checking} className="h-11 w-full bg-gradient-gold text-base font-semibold text-primary-foreground">
         {checking ? <><Loader2 className="mr-2 h-3 w-3 animate-spin" />Checking…</> : "Check status"}
       </Button>
     </form>
